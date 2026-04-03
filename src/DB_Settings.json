@@ -9,8 +9,7 @@
     { "action_id": 4, "action_name": "Provide Phone", "points_awarded": 15 },
     { "action_id": 10, "action_name": "Social Media Story Post", "points_awarded": 30 },
     { "action_id": 13, "action_name": "Google Review", "points_awarded": 150 },
-    { "action_id": 14, "action_name": "Apple Maps Review", "points_awarded": 150 },
-    { "action_id": 16, "action_name": "YouTube Subscribe", "points_awarded": 150 },
+    { "action_id": 14, "action_name": "YouTube Subscription", "points_awarded": 150 },
     { "action_id": 15, "action_name": "Seasoning Vote", "points_awarded": 50 },
     { "action_id": 17, "action_name": "Retreat Interest", "points_awarded": 100 }
   ]

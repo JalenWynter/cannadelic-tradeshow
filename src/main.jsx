@@ -993,7 +993,7 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
         <GiveawayPackage />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-          {['Google Review', 'Apple Maps Review', 'Social Media Story Post'].map(task => {
+          {['Google Review', 'YouTube Subscription', 'Social Media Story Post'].map(task => {
               const isDone = completedActions.includes(task);
               return (
                   <div key={task} className="card" style={{ 
@@ -1004,7 +1004,7 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    minHeight: '250px'
+                    minHeight: '320px'
                   }}>
                       <h3 style={{ marginBottom: '15px' }}>{task} {isDone && '✅'}</h3>
                       
@@ -1012,6 +1012,20 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
                         <div style={{ marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <QRCodeCanvas value="https://search.google.com/local/writereview?placeid=ChIJRYOSq0vzwogRnYP5n_UBNkQ" size={100} />
                           <p style={{ color: 'black', fontSize: '0.6rem', marginTop: '5px', fontWeight: 'bold', margin: '5px 0 0 0' }}>SCAN TO REVIEW</p>
+                        </div>
+                      )}
+
+                      {task === 'YouTube Subscription' && !isDone && (
+                        <div style={{ marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <QRCodeCanvas value="https://www.youtube.com/@GUDESSENCE?sub_confirmation=1" size={100} />
+                          <p style={{ color: 'black', fontSize: '0.6rem', marginTop: '5px', fontWeight: 'bold', margin: '5px 0 0 0' }}>SCAN TO SUBSCRIBE</p>
+                        </div>
+                      )}
+
+                      {task === 'Social Media Story Post' && !isDone && (
+                        <div style={{ marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <QRCodeCanvas value="https://www.instagram.com/gudessence.clearwater/" size={100} />
+                          <p style={{ color: 'black', fontSize: '0.6rem', marginTop: '5px', fontWeight: 'bold', margin: '5px 0 0 0' }}>SCAN TO FOLLOW / TAG</p>
                         </div>
                       )}
 
@@ -1182,12 +1196,15 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
   const [logs, setLogs] = useState([]);
   const [lastBackup, setLastBackup] = useState(null);
   const [nextBackup, setNextBackup] = useState(null);
+  const [backupSize, setBackupSize] = useState('0 KB');
   const [countdown, setCountdown] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [healthStatus, setHealthStatus] = useState('Checking...');
   
   // Support Ticket States
   const [supportModal, setSupportModal] = useState(null); // { id, name }
+  const [redemptionModal, setRedemptionModal] = useState(null); // { id, name, currentPoints, isVip }
+  const [ticketViewModal, setTicketViewModal] = useState(null); // { name, tickets }
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
   const [ticketCategory, setTicketCategory] = useState('Ticketing');
@@ -1202,6 +1219,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
     // Backup
     setLastBackup(await api.getLastBackupTime());
     setNextBackup(await api.getNextBackupTime());
+    setBackupSize(await api.getBackupSize());
 
     // Logs
     const l = await api.getStaffLogs(15);
@@ -1263,7 +1281,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
   }, [nextBackup]);
 
   const fixDataContradictions = async () => {
-    setNotify({ message: 'Fixing inconsistencies...', type: 'success' });
+    setNotify({ message: 'Analyzing data...', type: 'success' });
     let fixed = 0;
     for (const c of contacts) {
       const physicalCount = c.physical_tickets?.length || 0;
@@ -1282,7 +1300,12 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
         fixed++;
       }
     }
-    setNotify({ message: `Fixed ${fixed} records`, type: 'success' });
+    
+    if (fixed === 0) {
+      setNotify({ message: 'No inconsistencies found. Data is healthy!', type: 'success' });
+    } else {
+      setNotify({ message: `Success! Repaired ${fixed} records.`, type: 'success' });
+    }
     loadData();
   };
 
@@ -1315,6 +1338,23 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
     loadData();
   };
 
+  const handleRedeem = async (item, cost) => {
+    try {
+      if (item === 'VIP Upgrade') {
+        if (redemptionModal.isVip) throw new Error('Already VIP!');
+        await api.redeemPoints(redemptionModal.id, cost, item, staffName);
+        await api.grantVipStatus(redemptionModal.id, staffName);
+      } else {
+        await api.redeemPoints(redemptionModal.id, cost, item, staffName);
+      }
+      setNotify({ message: `${item} Redeemed!`, type: 'success' });
+      setRedemptionModal(null);
+      loadData();
+    } catch (err) {
+      setNotify({ message: err.message, type: 'error' });
+    }
+  };
+
   const handleWipe = async () => {
     const staff = STAFF_LIST.find(s => s.name === staffName);
     if (wipePin1 === staff.pin && wipePin2 === staff.pin) { await api.wipeAllData(); setNotify({ message: 'DATA WIPED', type: 'error' }); setTimeout(() => window.location.reload(), 1000); } 
@@ -1336,6 +1376,10 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
           <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '30px' }}>
             <div style={{ fontSize: '0.7rem', opacity: 0.7, textTransform: 'uppercase', marginBottom: '5px' }}>Next Backup</div>
             <div style={{ fontSize: '1.1rem', color: 'var(--cyber-pink)', fontWeight: 'bold' }}>{countdown || '--:--'}</div>
+          </div>
+          <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '30px' }}>
+            <div style={{ fontSize: '0.7rem', opacity: 0.7, textTransform: 'uppercase', marginBottom: '5px' }}>Data Weight</div>
+            <div style={{ fontSize: '1.1rem', color: 'white', fontWeight: 'bold' }}>{backupSize}</div>
           </div>
           <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '30px', cursor: 'pointer' }} onClick={fixDataContradictions}>
             <div style={{ fontSize: '0.7rem', opacity: 0.7, textTransform: 'uppercase', marginBottom: '5px' }}>Data Integrity</div>
@@ -1423,6 +1467,62 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
         </div>
       )}
 
+      {redemptionModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
+          <div className="card" style={{ width: '500px' }}>
+            <h3 className="neon-text-lime">Redeem Points</h3>
+            <p>Attendee: <strong>{redemptionModal.name}</strong></p>
+            <p>Balance: <strong style={{ color: 'var(--neon-lime)' }}>{redemptionModal.currentPoints} pts</strong></p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+              <button 
+                className="btn btn-lime" 
+                style={{ width: '100%', margin: 0, opacity: redemptionModal.isVip ? 0.5 : 1 }} 
+                onClick={() => handleRedeem('VIP Upgrade', 500)}
+                disabled={redemptionModal.currentPoints < 500 || redemptionModal.isVip}
+              >
+                VIP Upgrade (500 pts)
+              </button>
+              <button 
+                className="btn btn-violet" 
+                style={{ width: '100%', margin: 0 }} 
+                onClick={() => handleRedeem('Influencer Pack', 500)}
+                disabled={redemptionModal.currentPoints < 500}
+              >
+                Influencer Pack (500 pts)
+              </button>
+              <button 
+                className="btn" 
+                style={{ width: '100%', margin: 0, border: '1px solid var(--cyber-pink)', color: 'var(--cyber-pink)' }} 
+                onClick={() => handleRedeem('30% Off Booth Items', 500)}
+                disabled={redemptionModal.currentPoints < 500}
+              >
+                30% Off Everything (500 pts)
+              </button>
+            </div>
+
+            <button className="btn" style={{ width: '100%', marginTop: '30px' }} onClick={() => setRedemptionModal(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {ticketViewModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
+          <div className="card" style={{ width: '400px', textAlign: 'center' }}>
+            <h3 className="neon-text-lime" style={{ marginBottom: '20px' }}>Physical Tickets: {ticketViewModal.name}</h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center', marginBottom: '30px', maxHeight: '400px', overflowY: 'auto', padding: '10px' }}>
+              {ticketViewModal.tickets.map(t => (
+                <div key={t} style={{ background: 'var(--neon-lime)', color: 'black', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                  #{t}
+                </div>
+              ))}
+              {ticketViewModal.tickets.length === 0 && <p style={{ opacity: 0.5 }}>No physical tickets linked.</p>}
+            </div>
+            <button className="btn" style={{ width: '100%' }} onClick={() => setTicketViewModal(null)}>Close</button>
+          </div>
+        </div>
+      )}
+
       {showTickets && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4500 }}>
           <div className="card" style={{ width: '900px', maxHeight: '80vh', overflowY: 'auto' }}>
@@ -1505,18 +1605,22 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border)', opacity: 0.7, fontSize: '0.9rem' }}>
+        <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border)', opacity: 0.7, fontSize: '0.9rem' }}>
               <th>Name</th><th>Points</th><th>Total Tickets</th><th>VIP</th><th>🌸</th><th>🗳️</th><th>🇨🇴</th><th>Action</th>
             </tr>
           </thead>
           <tbody>{contacts.map(c => (
             <tr key={c.contact_id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
               <td>{c.name}</td><td>{c.total_points}</td>
-              <td>
+              <td 
+                style={{ cursor: c.physical_tickets?.length > 0 ? 'pointer' : 'default' }} 
+                onClick={() => { if (c.physical_tickets?.length > 0) { playSound('click'); setTicketViewModal({ name: c.name, tickets: c.physical_tickets }); } }}
+              >
                 <span style={{ fontWeight: 'bold', color: 'var(--neon-lime)' }}>{c.entries}</span>
-                {c.physical_tickets?.length > 0 && <span style={{ fontSize: '0.7rem', opacity: 0.6, marginLeft: '5px' }}>({c.physical_tickets.length} Physical)</span>}
+                {c.physical_tickets?.length > 0 && <span style={{ fontSize: '0.7rem', opacity: 0.6, marginLeft: '5px' }}>({c.physical_tickets.length} Physical 🔍)</span>}
               </td>
               <td>{c.is_vip ? '✅' : ''}</td>
               <td>{c.flower_claimed ? '🌸' : ''}</td>
@@ -1524,11 +1628,13 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
               <td>{c.colombia ? '🔥' : ''}</td>
               <td style={{ display: 'flex', gap: '5px' }}>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px' }} onClick={() => { playSound('click'); setRaffleModal({ id: c.contact_id, name: c.name }); }}>🎟️ Adjust</button>
+                <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--neon-lime)' }} onClick={() => setRedemptionModal({ id: c.contact_id, name: c.name, currentPoints: c.total_points, isVip: c.is_vip })}>🎁 Redeem</button>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid gray' }} onClick={() => setSupportModal({ id: c.contact_id, name: c.name })}>💬 Support</button>
               </td>
             </tr>
           ))}</tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {/* Activity Log Section */}

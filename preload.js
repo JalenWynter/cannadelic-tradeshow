@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getKioskStatus: () => ipcRenderer.invoke('get-kiosk-status'),
   getLastBackupTime: () => ipcRenderer.invoke('get-last-backup-time'),
   getNextBackupTime: () => ipcRenderer.invoke('get-next-backup-time'),
+  getBackupSize: () => ipcRenderer.invoke('get-backup-size'),
   openURL: (url) => ipcRenderer.send('open-external', url)
 });

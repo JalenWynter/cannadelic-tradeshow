@@ -25,7 +25,15 @@ const api = {
   async checkInOrRegister({ firstName, lastName, email, phone, ticketNumbers }) {
     const e = email ? email.toLowerCase().trim() : '';
     const p = phone ? phone.replace(/\D/g, '') : '';
-    const newTickets = Array.isArray(ticketNumbers) ? ticketNumbers.filter(t => t.length === 6) : [];
+    const rawTickets = Array.isArray(ticketNumbers) ? ticketNumbers.filter(t => t.trim().length === 6) : [];
+    
+    // Check global uniqueness for all input tickets
+    for (const t of rawTickets) {
+      if (await this.isTicketDuplicate(t)) throw new Error(`Ticket #${t} is already registered.`);
+    }
+    
+    // Deduplicate within the input list itself
+    const newTickets = [...new Set(rawTickets)];
     
     // Attempt to find existing user
     let contact = null;
@@ -33,13 +41,16 @@ const api = {
     if (!contact && p) contact = await this.getContactByPhone(p);
 
     if (contact) {
-      // Merge ticket numbers if provided
+      // Merge ticket numbers if provided, ensuring no duplicates
       if (newTickets.length > 0) {
         const existingTickets = contact.physical_tickets || [];
         const mergedTickets = [...new Set([...existingTickets, ...newTickets])];
         if (mergedTickets.length !== existingTickets.length) {
           await window.electronAPI.jsonRun('Contacts', 'update', { physical_tickets: mergedTickets }, { contact_id: contact.contact_id });
           contact.physical_tickets = mergedTickets;
+          // Award raffle entry for every NEW ticket added
+          const addedCount = mergedTickets.length - existingTickets.length;
+          if (addedCount > 0) await this.addRaffleEntries(contact.contact_id, addedCount, 'Merged Physical Tickets');
         }
       }
       return { contactId: contact.contact_id, isNew: false, contact };
@@ -70,8 +81,16 @@ const api = {
   async registerContact({ firstName, lastName, email, phone, ticketNumbers }) {
     const e = email.toLowerCase().trim();
     const p = phone.replace(/\D/g, '');
-    const newTickets = Array.isArray(ticketNumbers) ? ticketNumbers.filter(t => t.length === 6) : [];
+    const rawTickets = Array.isArray(ticketNumbers) ? ticketNumbers.filter(t => t.trim().length === 6) : [];
     
+    // Check global uniqueness for all input tickets
+    for (const t of rawTickets) {
+      if (await this.isTicketDuplicate(t)) throw new Error(`Ticket #${t} is already registered.`);
+    }
+
+    // Deduplicate within input
+    const newTickets = [...new Set(rawTickets)];
+
     if (await this.getContactByEmail(e)) throw new Error('Email Taken');
     if (await this.getContactByPhone(p)) throw new Error('Phone Taken');
 
@@ -89,6 +108,8 @@ const api = {
       flower_claimed: false 
     }, null, { email: e }); // Unique check on email
     await this.awardPoints(res.id, 'Booth Visit');
+    // Award raffle entry for every ticket
+    if (newTickets.length > 0) await this.addRaffleEntries(res.id, newTickets.length, 'Registration Physical Tickets');
     return res.id;
   },
 
@@ -143,10 +164,17 @@ const api = {
       await window.electronAPI.logStaffAction({ type: 'VIP_REVOKE', staff_name: staffName, contact_id: id });
     }
   },
-  async redeemPoints(contactId, points, staffName) {
+  async redeemPoints(contactId, points, itemName, staffName) {
     const c = await this.getContactById(contactId);
-    await window.electronAPI.jsonRun('Contacts', 'update', { total_points: c.total_points - points }, { contact_id: contactId });
-    await window.electronAPI.logStaffAction({ type: 'REDEMPTION', staff_name: staffName, contact_id: contactId, points_deducted: points });
+    if ((c.total_points || 0) < points) throw new Error('Insufficient points');
+    await window.electronAPI.jsonRun('Contacts', 'update', { total_points: (c.total_points || 0) - points }, { contact_id: contactId });
+    await window.electronAPI.logStaffAction({ 
+      type: 'REDEMPTION', 
+      staff_name: staffName, 
+      contact_id: contactId, 
+      points_deducted: points,
+      item: itemName 
+    });
   },
   async wipeAllData() {
     return await window.electronAPI.wipeAllData();
@@ -169,25 +197,34 @@ const api = {
   async getNextBackupTime() {
     return await window.electronAPI.getNextBackupTime();
   },
+  async getBackupSize() {
+    return await window.electronAPI.getBackupSize();
+  },
+  async isTicketDuplicate(ticket) {
+    const allContacts = await window.electronAPI.jsonQuery('Contacts', {});
+    return allContacts.some(c => (c.physical_tickets || []).includes(ticket.trim()));
+  },
   async addTicketToContact(contactId, ticketNumber) {
     const ticket = ticketNumber.trim();
     if (ticket.length !== 6) throw new Error('Invalid ticket number (must be 6 digits)');
     
-    // Check if ticket is already claimed by ANYONE
-    const allContacts = await window.electronAPI.jsonQuery('Contacts', {});
-    const isAlreadyClaimed = allContacts.some(c => (c.physical_tickets || []).includes(ticket));
-    
-    if (isAlreadyClaimed) throw new Error('This ticket has already been registered');
+    // Check if ticket is already claimed by ANYONE (Global Uniqueness)
+    if (await this.isTicketDuplicate(ticket)) {
+      throw new Error('This ticket has already been registered');
+    }
     
     const contact = await this.getContactById(contactId);
     if (!contact) throw new Error('Account not found');
     
     const existingTickets = contact.physical_tickets || [];
+    // Individual Uniqueness (redundant but safe)
+    if (existingTickets.includes(ticket)) throw new Error('You have already added this ticket');
+
     const updatedTickets = [...existingTickets, ticket];
     
     await window.electronAPI.jsonRun('Contacts', 'update', { physical_tickets: updatedTickets }, { contact_id: contactId });
     
-    // Optional: Automatically award a digital entry for the physical ticket
+    // Automatically award a digital entry for the physical ticket
     await this.addRaffleEntries(contactId, 1, `Physical Ticket #${ticket}`);
     
     return { success: true, updatedTickets };

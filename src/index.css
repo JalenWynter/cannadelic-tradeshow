@@ -38,7 +38,7 @@ body {
   height: 100%;
   overflow-y: auto;
   position: relative;
-  padding: 20px;
+  padding: 50px 20px;
 }
 
 /* Typography */
@@ -286,11 +286,11 @@ input:focus {
 
 .numpad {
   display: grid;
-  grid-template-columns: repeat(3, 70px);
-  gap: 12px;
+  grid-template-columns: repeat(3, 85px);
+  gap: 15px;
 }
 
 .numpad .key {
-  height: 70px;
-  font-size: 1.4rem;
+  height: 85px;
+  font-size: 1.6rem;
 }

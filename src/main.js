@@ -155,7 +155,7 @@ async function persistToDisk(collection) {
 
 // --- Automated Backup System (Every 10 Minutes with Compression & Deletion) ---
 let lastBackupTime = null;
-let nextBackupTime = Date.now() + 600000;
+let nextBackupTime = Date.now() + 300000;
 const backupDirPrimary = path.join(userDataPath, 'backups');
 const backupDirSecondary = path.join(__dirname, 'backups'); // Local project dir
 
@@ -179,22 +179,22 @@ function runBackup() {
     // Save to Primary (UserData - Always writable)
     fs.writeFileSync(backupFilePrimary, compressed);
     lastBackupTime = new Date().toISOString();
-    nextBackupTime = Date.now() + 600000;
+    nextBackupTime = Date.now() + 300000;
 
     // Save to Secondary (Project Dir - Writable in Dev/Unpackaged)
     try { fs.writeFileSync(backupFileSecondary, compressed); } catch(e) {}
 
-    // --- Clean up: Delete backups older than 48 hours in both locations ---
+    // --- Clean up: Delete backups older than 7 days in both locations ---
     [backupDirPrimary, backupDirSecondary].forEach(dir => {
       try {
         if (!fs.existsSync(dir)) return;
         const files = fs.readdirSync(dir);
-        const fortyEightHoursAgo = now.getTime() - (48 * 60 * 60 * 1000);
+        const sevenDaysAgo = now.getTime() - (7 * 24 * 60 * 60 * 1000);
 
         files.forEach(file => {
           const filePath = path.join(dir, file);
           const stats = fs.statSync(filePath);
-          if (stats.mtimeMs < fortyEightHoursAgo) {
+          if (stats.mtimeMs < sevenDaysAgo) {
             if (stats.isDirectory()) fs.rmSync(filePath, { recursive: true, force: true });
             else fs.unlinkSync(filePath);
           }
@@ -206,7 +206,7 @@ function runBackup() {
   }
 }
 
-setInterval(runBackup, 600000); // 10 minutes
+setInterval(runBackup, 300000); // 5 minutes (Optimized for 6-hour event)
 
 // --- Kiosk Identification ---
 function getKioskId(webContents) {
@@ -351,6 +351,29 @@ ipcMain.handle('get-kiosk-status', (event) => {
 
 ipcMain.handle('get-last-backup-time', () => lastBackupTime);
 ipcMain.handle('get-next-backup-time', () => nextBackupTime);
+
+ipcMain.handle('get-backup-size', async () => {
+  const getDirSize = (dir) => {
+    let size = 0;
+    if (!fs.existsSync(dir)) return 0;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stats = fs.statSync(filePath);
+      if (stats.isFile()) size += stats.size;
+      else if (stats.isDirectory()) size += getDirSize(filePath);
+    }
+    return size;
+  };
+  
+  const sizePrimary = getDirSize(backupDirPrimary);
+  const sizeSecondary = getDirSize(backupDirSecondary);
+  const totalBytes = sizePrimary + sizeSecondary;
+  
+  if (totalBytes < 1024) return `${totalBytes} B`;
+  if (totalBytes < 1024 * 1024) return `${(totalBytes / 1024).toFixed(1)} KB`;
+  return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
+});
 
 ipcMain.handle('wipe-all-data', async (event) => {
   const kioskId = getKioskId(event.sender);
