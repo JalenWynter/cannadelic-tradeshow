@@ -1200,6 +1200,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
   const [countdown, setCountdown] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [healthStatus, setHealthStatus] = useState('Checking...');
+  const [activeFilter, setViewFilter] = useState('all'); // all, new, vip, engaged, voted
   
   // Support Ticket States
   const [supportModal, setSupportModal] = useState(null); // { id, name }
@@ -1243,10 +1244,24 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
         ...c, 
         entries: await api.getEntryCount(c.contact_id),
         voted: await api.getVote(c.contact_id),
-        colombia: actions.includes('Retreat Interest')
+        colombia: actions.includes('Retreat Interest'),
+        actionCount: actions.length
       };
     }));
-    setContacts(withCounts);
+
+    // Apply Filters
+    let filtered = withCounts;
+    if (activeFilter === 'new') {
+      filtered = withCounts.filter(c => c.total_points <= 10 && c.actionCount <= 1 && !c.is_vip);
+    } else if (activeFilter === 'vip') {
+      filtered = withCounts.filter(c => c.is_vip);
+    } else if (activeFilter === 'engaged') {
+      filtered = withCounts.filter(c => c.actionCount > 1 || c.total_points > 10);
+    } else if (activeFilter === 'voted') {
+      filtered = withCounts.filter(c => c.voted);
+    }
+
+    setContacts(filtered);
     
     // --- Data Health Check ---
     let issues = 0;
@@ -1260,7 +1275,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
     setHealthStatus(issues > 0 ? `⚠️ ${issues} inconsistencies` : '✅ Data Healthy');
   };
 
-  useEffect(() => { loadData(); }, [searchTerm]);
+  useEffect(() => { loadData(); }, [searchTerm, activeFilter]);
 
   // Timer Effect
   useEffect(() => {
@@ -1605,6 +1620,37 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        {/* Filter Tabs */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
+          {[
+            { id: 'all', label: 'All Attendees' },
+            { id: 'new', label: 'New/Inactive' },
+            { id: 'vip', label: 'VIP Members' },
+            { id: 'engaged', label: 'Engaged (Active)' },
+            { id: 'voted', label: 'Voted on Flavors' }
+          ].map(tab => (
+            <button 
+              key={tab.id}
+              onClick={() => setViewFilter(tab.id)}
+              style={{
+                padding: '8px 20px',
+                borderRadius: '50px',
+                border: activeFilter === tab.id ? '1px solid var(--neon-lime)' : '1px solid var(--glass-border)',
+                background: activeFilter === tab.id ? 'rgba(204, 255, 0, 0.1)' : 'transparent',
+                color: activeFilter === tab.id ? 'var(--neon-lime)' : 'rgba(255,255,255,0.6)',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                whiteSpace: 'nowrap',
+                fontWeight: activeFilter === tab.id ? 'bold' : 'normal',
+                transition: 'all 0.2s'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
             <thead>
