@@ -1,4 +1,17 @@
-# GŪDESSENCE Tradeshow Kiosk App - Official Briefing
+# GŪDESSENCE Tradeshow Kiosk App
+
+> ### ⚠️ **WINDOWS QUICK START (FOR THE SHOW)** ⚠️
+> **1. Install [Node.js (LTS)](https://nodejs.org/) and [Git](https://git-scm.com/)**
+> **2. Open terminal and run:**
+> ```bash
+> git clone https://github.com/JalenWynter/cannadelic-tradeshow.git
+> cd cannadelic-tradeshow
+> npm install
+> npm run dev
+> ```
+> **To create a standalone .exe installer, run: `npm run build:win`**
+
+---
 
 ## 🚀 Setup & Installation (Windows)
 
@@ -12,8 +25,8 @@ You will need to install the following tools:
 ### 2. Clone the Repository
 Open a terminal (Command Prompt, PowerShell, or Git Bash) and run:
 ```bash
-git clone <repository-url>
-cd gudessence-tradeshow-app
+git clone https://github.com/JalenWynter/cannadelic-tradeshow.git
+cd cannadelic-tradeshow
 ```
 
 ### 3. Install Dependencies
@@ -22,7 +35,7 @@ In the project directory, run:
 npm install
 ```
 
-### 4. Run the App in Development Mode
+### 4. Run the App in Development Mode (Recommended for Show)
 To start the app for development:
 ```bash
 npm run dev
