@@ -1668,11 +1668,11 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
                 <span style={{ fontWeight: 'bold', color: 'var(--neon-lime)' }}>{c.entries}</span>
                 {c.physical_tickets?.length > 0 && <span style={{ fontSize: '0.7rem', opacity: 0.6, marginLeft: '5px' }}>({c.physical_tickets.length} Physical 🔍)</span>}
               </td>
-              <td>{c.is_vip ? '✅' : ''}</td>
-              <td>{c.flower_claimed ? '🌸' : ''}</td>
-              <td>{c.voted ? '🗳️' : ''}</td>
-              <td>{c.colombia ? '🔥' : ''}</td>
-              <td style={{ display: 'flex', gap: '5px' }}>
+              <td><span className="icon-btn" onClick={() => c.is_vip && setNotify({ message: 'VIP Status Active', type: 'success' })}>{c.is_vip ? '✅' : ''}</span></td>
+              <td><span className="icon-btn" onClick={() => c.flower_claimed && setNotify({ message: '1g Flower Perk Claimed', type: 'success' })}>{c.flower_claimed ? '🌸' : ''}</span></td>
+              <td><span className="icon-btn" onClick={() => c.voted && setNotify({ message: 'User has Voted on Seasonings', type: 'success' })}>{c.voted ? '🗳️' : ''}</span></td>
+              <td><span className="icon-btn" onClick={() => c.colombia && setNotify({ message: 'Interested in Colombia Retreat', type: 'success' })}>{c.colombia ? '🔥' : ''}</span></td>
+              <td style={{ display: 'flex', gap: '5px', padding: '10px' }}>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px' }} onClick={() => { playSound('click'); setRaffleModal({ id: c.contact_id, name: c.name }); }}>🎟️ Adjust</button>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--neon-lime)' }} onClick={() => setRedemptionModal({ id: c.contact_id, name: c.name, currentPoints: c.total_points, isVip: c.is_vip })}>🎁 Redeem</button>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid gray' }} onClick={() => setSupportModal({ id: c.contact_id, name: c.name })}>💬 Support</button>
