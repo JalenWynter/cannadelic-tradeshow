@@ -26,19 +26,19 @@ const api = {
     const e = email ? email.toLowerCase().trim() : '';
     const p = phone ? phone.replace(/\D/g, '') : '';
     const rawTickets = Array.isArray(ticketNumbers) ? ticketNumbers.filter(t => t.trim().length === 6) : [];
-    
-    // Check global uniqueness for all input tickets
-    for (const t of rawTickets) {
-      if (await this.isTicketDuplicate(t)) throw new Error(`Ticket #${t} is already registered.`);
-    }
-    
-    // Deduplicate within the input list itself
     const newTickets = [...new Set(rawTickets)];
     
     // Attempt to find existing user
     let contact = null;
     if (e) contact = await this.getContactByEmail(e);
     if (!contact && p) contact = await this.getContactByPhone(p);
+
+    // Check global uniqueness for all input tickets, excluding the found contact if any
+    for (const t of newTickets) {
+      if (await this.isTicketDuplicate(t, contact ? contact.contact_id : null)) {
+        throw new Error(`Ticket #${t} is already registered to another account.`);
+      }
+    }
 
     if (contact) {
       // Merge ticket numbers if provided, ensuring no duplicates
@@ -200,9 +200,12 @@ const api = {
   async getBackupSize() {
     return await window.electronAPI.getBackupSize();
   },
-  async isTicketDuplicate(ticket) {
+  async isTicketDuplicate(ticket, excludeContactId = null) {
     const allContacts = await window.electronAPI.jsonQuery('Contacts', {});
-    return allContacts.some(c => (c.physical_tickets || []).includes(ticket.trim()));
+    return allContacts.some(c => {
+      if (excludeContactId && c.contact_id === excludeContactId) return false;
+      return (c.physical_tickets || []).includes(ticket.trim());
+    });
   },
   async addTicketToContact(contactId, ticketNumber) {
     const ticket = ticketNumber.trim();

@@ -121,6 +121,44 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
 
 // --- Shared Components ---
 
+const CustomDropdown = ({ options, value, onChange, placeholder = "Select..." }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative', width: '100%', marginBottom: '20px' }}>
+      <button 
+        type="button"
+        className="btn" 
+        style={{ width: '100%', margin: 0, justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span>{value || placeholder}</span>
+        <span style={{ fontSize: '0.8rem', opacity: 0.5 }}>{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen && (
+        <div style={{ 
+          position: 'absolute', top: '100%', left: 0, right: 0, 
+          background: '#1a1a20', border: '1px solid var(--glass-border)', 
+          borderRadius: '10px', zIndex: 5000, marginTop: '5px',
+          maxHeight: '250px', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
+        }}>
+          {options.map(opt => (
+            <div 
+              key={opt} 
+              onClick={() => { onChange(opt); setIsOpen(false); playSound('click'); }}
+              style={{ 
+                padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', 
+                cursor: 'pointer', background: value === opt ? 'rgba(204, 255, 0, 0.1)' : 'transparent' 
+              }}
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Notification = ({ message, type, onClose }) => {
     useEffect(() => {
         const t = setTimeout(onClose, 3000);
@@ -161,14 +199,13 @@ const StaffApprovalModal = ({ isOpen, onClose, onApprove, actionName, onFocusInp
         <h3 className="neon-text-pink">Staff Approval</h3>
         <p style={{ margin: '15px 0' }}>Action: <strong>{actionName}</strong></p>
         <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <select className="btn" style={{ width: '100%', background: 'var(--glass-bg)', color: 'white' }} value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} required>
-              <option value="">Choose Staff...</option>
-              {STAFF_LIST.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-            </select>
-          </div>
-          <div className="input-group">
-            <input 
+          <CustomDropdown 
+            options={STAFF_LIST.map(s => s.name)} 
+            value={selectedStaff} 
+            onChange={setSelectedStaff} 
+            placeholder="Choose Staff..." 
+          />
+          <div className="input-group">            <input 
               type="password" 
               placeholder="PIN" 
               value={pin} 
@@ -215,19 +252,41 @@ const RefillCountdown = ({ lastRedeemed }) => {
 
 // --- Views ---
 
-const Home = ({ onNavigate, currentContactId, currentContactName }) => {
+const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) => {
   const [totalEntries, setTotalEntries] = useState(0);
+  const [hasRetreat, setHasRetreat] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const fetchTotal = async () => {
       const list = await api.getAllRecentContacts();
       const counts = await Promise.all(list.map(c => api.getEntryCount(c.contact_id)));
       setTotalEntries(counts.reduce((a, b) => a + b, 0));
+      
+      if (currentContactId) {
+        const actions = await api.getCompletedActions(currentContactId);
+        setHasRetreat(actions.includes('Retreat Interest'));
+      }
     };
     fetchTotal();
     const interval = setInterval(fetchTotal, 30000); // Update every 30s
     return () => clearInterval(interval);
-  }, []);
+  }, [currentContactId]);
+
+  const handleQuickRetreat = async (e) => {
+    e.stopPropagation();
+    if (!currentContactId) return onNavigate('register');
+    setLoading(true);
+    try {
+      await api.verifyAndAwardAction(currentContactId, 'Retreat Interest', 'System');
+      setHasRetreat(true);
+      if (setNotify) setNotify({ message: 'Success! Colombia Interest Logged.', type: 'success' });
+    } catch (err) {
+      if (setNotify) setNotify({ message: 'Registration failed', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="view-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', minHeight: '100%' }}>
@@ -276,16 +335,34 @@ const Home = ({ onNavigate, currentContactId, currentContactName }) => {
         <div style={{ width: '100%' }}>
           <button className="btn" style={{ 
             width: '100%', 
-            height: '110px', 
+            height: '130px', 
             margin: 0, 
             background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
             boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
             border: 'none',
-            color: 'black'
+            color: 'black',
+            position: 'relative'
           }} onClick={() => { playSound('click'); onNavigate('colombia'); }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '1.6rem', fontWeight: '900' }}>🇨🇴 RETREAT TO COLOMBIA 🇨🇴</div>
               <div style={{ fontSize: '1rem', fontWeight: 'bold', textTransform: 'none' }}>Early Bird: Save $500! (Luxury All-Inclusive)</div>
+              
+              {currentContactId && (
+                <div style={{ marginTop: '10px' }}>
+                  {hasRetreat ? (
+                    <span style={{ background: 'rgba(0,0,0,0.2)', padding: '5px 15px', borderRadius: '50px', fontSize: '0.8rem', fontWeight: 'bold' }}>✅ ON THE LIST</span>
+                  ) : (
+                    <button 
+                      className="btn btn-lime" 
+                      style={{ minWidth: 'auto', padding: '5px 20px', fontSize: '0.8rem', height: '35px', margin: 0, boxShadow: '0 5px 15px rgba(0,0,0,0.3)' }}
+                      onClick={handleQuickRetreat}
+                      disabled={loading}
+                    >
+                      {loading ? '...' : 'ONE-TAP SIGN UP'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </button>
         </div>
@@ -768,17 +845,16 @@ const CheckIn = ({ onBack, onSuccess, onFocusInput }) => {
                 readOnly 
                 placeholder={`Ticket #${i+1}`} 
                 style={{ letterSpacing: '3px', fontWeight: 'bold' }}
-                onClick={() => onFocusInput('numeric', num, (v) => updateTicket(i, v), 6, i < 9 ? () => {
-                  if (i === ticketNumbers.length - 1) handleAddTicket();
-                  setTimeout(() => document.getElementById(`ticket-${i+1}`).click(), 100);
-                } : null)} 
+                onClick={() => onFocusInput('numeric', num, (v) => updateTicket(i, v), 6)} 
               />
               {ticketNumbers.length > 1 && (
                 <button type="button" className="btn" style={{ minWidth: '50px', padding: '10px', margin: 0, background: 'rgba(255,0,0,0.2)', border: '1px solid red' }} onClick={() => setTicketNumbers(ticketNumbers.filter((_, idx) => idx !== i))}>✕</button>
               )}
             </div>
           ))}
-          <button type="button" className="btn" style={{ width: '100%', margin: '10px 0', background: 'rgba(255,255,255,0.05)', border: '1px dashed var(--neon-lime)', fontSize: '0.9rem' }} onClick={handleAddTicket}>+ Add Another Ticket</button>
+          {ticketNumbers.length < 10 && (
+            <button type="button" className="btn" style={{ width: '100%', margin: '10px 0', background: 'rgba(255,255,255,0.05)', border: '1px dashed var(--neon-lime)', fontSize: '0.9rem' }} onClick={handleAddTicket}>+ Add Another Ticket</button>
+          )}
         </div>
 
         <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '20px', textAlign: 'center' }}>Provide Email or Phone to check existing accounts.</p>
@@ -816,6 +892,7 @@ const Profile = ({ contactId, onNavigate }) => {
   const [contact, setContact] = useState(null);
   const [entries, setEntries] = useState(0);
   const [actions, setActions] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   // Effect to navigate away if contactId becomes null
   useEffect(() => {
@@ -824,30 +901,97 @@ const Profile = ({ contactId, onNavigate }) => {
     }
   }, [contactId, onNavigate]);
 
+  const load = async () => {
+    const c = await api.getContactById(contactId);
+    setContact(c);
+    setEntries(await api.getEntryCount(contactId));
+    setActions(await api.getCompletedActions(contactId));
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const c = await api.getContactById(contactId);
-      setContact(c);
-      setEntries(await api.getEntryCount(contactId));
-      setActions(await api.getCompletedActions(contactId));
-    };
     if (contactId) load();
   }, [contactId]);
+
+  const handleQuickAction = async (actionName) => {
+    setLoading(true);
+    try {
+      await api.verifyAndAwardAction(contactId, actionName, 'System');
+      await load();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!contact) return <div className="view-container">Loading...</div>;
+  
+  const hasRetreat = actions.includes('Retreat Interest');
+
   return (
     <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
-      <div className="card" style={{ textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
-        <h2 className="neon-text-lime">{contact.name}</h2>
-        <div style={{ display: 'flex', gap: '20px', margin: '30px 0' }}>
-            <div className="card" style={{ flex: 1 }}>Points: <span className="neon-text-violet">{contact.total_points}</span></div>
-            <div className="card" style={{ flex: 1 }}>Entries: <span className="neon-text-lime">{entries}</span></div>
+      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div className="card" style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <h2 className="neon-text-lime" style={{ fontSize: '2.5rem' }}>{contact.name}</h2>
+          <p style={{ opacity: 0.7 }}>Attendee ID: #{contact.contact_id}</p>
+          
+          <div style={{ display: 'flex', gap: '20px', margin: '30px 0' }}>
+              <div className="card" style={{ flex: 1, background: 'rgba(139, 0, 255, 0.05)', border: '1px solid var(--electric-violet)' }}>
+                <div style={{ fontSize: '0.8rem', opacity: 0.7, textTransform: 'uppercase' }}>Total Points</div>
+                <div className="neon-text-violet" style={{ fontSize: '2rem', fontWeight: 'bold' }}>{contact.total_points}</div>
+              </div>
+              <div className="card" style={{ flex: 1, background: 'rgba(204, 255, 0, 0.05)', border: '1px solid var(--neon-lime)' }}>
+                <div style={{ fontSize: '0.8rem', opacity: 0.7, textTransform: 'uppercase' }}>Raffle Entries</div>
+                <div className="neon-text-lime" style={{ fontSize: '2rem', fontWeight: 'bold' }}>{entries}</div>
+              </div>
+          </div>
         </div>
-        <div className="card" style={{ background: 'rgba(0,0,0,0.2)', textAlign: 'left' }}>
-            <h4 style={{ color: 'var(--neon-lime)' }}>Activities Done:</h4>
-            <ul>{actions.map((a, i) => <li key={i}>{a} ✅</li>)}</ul>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
+          {/* Quick Actions Card */}
+          <div className="card" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+            <h3 className="neon-text-pink" style={{ marginBottom: '20px', fontSize: '1.2rem' }}>Quick Sign-Ups</h3>
+            
+            {!hasRetreat ? (
+              <button 
+                className="btn btn-lime" 
+                style={{ width: '100%', margin: '0 0 10px 0', height: '70px', fontSize: '1rem' }} 
+                onClick={() => handleQuickAction('Retreat Interest')}
+                disabled={loading}
+              >
+                {loading ? 'Processing...' : '🇨🇴 Join Retreat Waitlist'}
+              </button>
+            ) : (
+              <div style={{ padding: '15px', background: 'rgba(204, 255, 0, 0.1)', borderRadius: '10px', color: 'var(--neon-lime)', textAlign: 'center', marginBottom: '10px', border: '1px solid var(--neon-lime)' }}>
+                ✅ Colombia Retreat Interest Logged
+              </div>
+            )}
+            
+            <p style={{ fontSize: '0.8rem', opacity: 0.5, textAlign: 'center' }}>
+              One-tap signup for exclusive event opportunities.
+            </p>
+          </div>
+
+          {/* Activities Completed */}
+          <div className="card" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <h3 style={{ color: 'var(--neon-lime)', marginBottom: '15px', fontSize: '1.2rem' }}>History</h3>
+              <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                <ul style={{ listStyle: 'none', padding: 0 }}>
+                  {actions.map((a, i) => (
+                    <li key={i} style={{ marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{a}</span>
+                      <span style={{ color: 'var(--neon-lime)' }}>✅</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+          </div>
         </div>
-        <button className="btn btn-violet" onClick={() => { playSound('click'); onNavigate('giveaway'); }}>Raffle Tasks</button>
-        <button className="btn btn-lime" onClick={() => { playSound('click'); onNavigate('home'); }}>Close</button>
+
+        <div style={{ display: 'flex', gap: '15px' }}>
+          <button className="btn btn-violet" style={{ flex: 1 }} onClick={() => { playSound('click'); onNavigate('giveaway'); }}>Earn More Entries</button>
+          <button className="btn" style={{ flex: 1, background: 'transparent' }} onClick={() => { playSound('click'); onNavigate('home'); }}>Back to Home</button>
+        </div>
       </div>
     </div>
   );
@@ -1160,14 +1304,13 @@ const StaffLogin = ({ onBack, onLoginSuccess, onFocusInput, setNotify }) => {
       <div className="card" style={{ width: '400px' }}>
         <h3 className="neon-text-pink">Staff Portal</h3>
         <form onSubmit={handleLogin}>
-          <div className="input-group">
-            <select className="btn" style={{ width: '100%', background: 'var(--glass-bg)', color: 'white' }} value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} required>
-              <option value="">Choose Name...</option>
-              {STAFF_LIST.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-            </select>
-          </div>
-          <div className="input-group">
-            <input 
+          <CustomDropdown 
+            options={STAFF_LIST.map(s => s.name)} 
+            value={selectedStaff} 
+            onChange={setSelectedStaff} 
+            placeholder="Choose Name..." 
+          />
+          <div className="input-group">            <input 
               type="password" 
               placeholder="PIN" 
               value={pin} 
@@ -1442,16 +1585,11 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
             
             <div className="input-group">
               <label className="input-label">Category</label>
-              <select 
+              <CustomDropdown 
+                options={["Ticketing", "Sales", "Data Entry", "Other"]} 
                 value={ticketCategory} 
-                onChange={(e) => setTicketCategory(e.target.value)}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'white', padding: '10px', borderRadius: '8px' }}
-              >
-                <option value="Ticketing">Ticketing / Raffle</option>
-                <option value="Sales">Sales / Merch</option>
-                <option value="Data Entry">Data Entry Error</option>
-                <option value="Other">Other / App Function</option>
-              </select>
+                onChange={setTicketCategory} 
+              />
             </div>
 
             <div className="input-group">
@@ -2205,7 +2343,7 @@ const App = () => {
           onNavigate={navigate} 
         />
 
-        {view === 'home' && <Home onNavigate={navigate} currentContactId={currentContactId} currentContactName={currentContactName} />}
+        {view === 'home' && <Home onNavigate={navigate} currentContactId={currentContactId} currentContactName={currentContactName} setNotify={setNotify} />}
         
         {/* Kiosk ID Label - Subtle indicator for staff */}
         <div style={{ position: 'fixed', top: '10px', right: '10px', fontSize: '0.8rem', opacity: 0.4, color: 'var(--neon-lime)', zIndex: 5, pointerEvents: 'none', fontWeight: 'bold' }}>
