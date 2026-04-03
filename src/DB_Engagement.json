@@ -1,0 +1,84 @@
+{
+  "UserActions": [
+    {
+      "contact_id": 1,
+      "action_id": 1,
+      "timestamp": "2026-04-02T15:07:41.065Z",
+      "useraction_id": 1
+    },
+    {
+      "contact_id": 1,
+      "action_id": 13,
+      "timestamp": "2026-04-02T15:07:58.226Z",
+      "useraction_id": 2
+    },
+    {
+      "contact_id": 2,
+      "action_id": 1,
+      "timestamp": "2026-04-02T15:09:25.764Z",
+      "useraction_id": 3
+    },
+    {
+      "contact_id": 2,
+      "action_id": 15,
+      "timestamp": "2026-04-03T01:35:29.278Z",
+      "useraction_id": 4
+    },
+    {
+      "contact_id": 1,
+      "action_id": 14,
+      "timestamp": "2026-04-03T12:39:33.887Z",
+      "useraction_id": 5
+    }
+  ],
+  "GiveawayEntries": [
+    {
+      "contact_id": -1,
+      "giveaway_id": 1,
+      "entry_time": "2026-04-02T15:07:58.231Z",
+      "is_winner": false,
+      "source": "Google Review",
+      "giveawayentrieie_id": 1
+    },
+    {
+      "contact_id": 2,
+      "giveaway_id": 1,
+      "entry_time": "2026-04-02T15:09:33.900Z",
+      "is_winner": false,
+      "source": "VIP Bonus",
+      "giveawayentrieie_id": 2
+    },
+    {
+      "contact_id": 2,
+      "giveaway_id": 1,
+      "entry_time": "2026-04-02T15:09:33.900Z",
+      "is_winner": false,
+      "source": "VIP Bonus",
+      "giveawayentrieie_id": 3
+    },
+    {
+      "contact_id": 1,
+      "giveaway_id": 1,
+      "entry_time": "2026-04-02T21:19:59.410Z",
+      "is_winner": false,
+      "source": "Staff Adjustment",
+      "giveawayentrie_id": 1
+    },
+    {
+      "contact_id": 1,
+      "giveaway_id": 1,
+      "entry_time": "2026-04-03T12:39:33.914Z",
+      "is_winner": false,
+      "source": "Apple Maps Review",
+      "giveawayentrie_id": 2
+    }
+  ],
+  "Votes": [
+    {
+      "contact_id": 2,
+      "seasoning_name": "Everything Bagel",
+      "timestamp": "2026-04-03T01:35:29.253Z",
+      "vote_id": 1
+    }
+  ]
+}

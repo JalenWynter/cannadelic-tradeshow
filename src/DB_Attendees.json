@@ -1,0 +1,23 @@
+{
+  "Contacts": [
+    {
+      "name": "jalen thomas",
+      "email": "jwynterthomas@gmail.com",
+      "phone": "9084568305",
+      "is_vip": false,
+      "total_points": 310,
+      "flower_claimed": false,
+      "contact_id": 1
+    },
+    {
+      "name": "malcolm X",
+      "email": "m@gmail.com",
+      "phone": "3211234323",
+      "is_vip": true,
+      "total_points": 60,
+      "flower_claimed": true,
+      "contact_id": 2,
+      "vip_popcorn_last_redeemed_at": "2026-04-03T02:52:35.466Z"
+    }
+  ]
+}

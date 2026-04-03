@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-electron
+backups
+.env
+*.db
+*.db-journal
+.DS_Store
+.vite-temp

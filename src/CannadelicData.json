@@ -1,0 +1,147 @@
+{
+  "Contacts": [
+    {
+      "name": "jalen thomas",
+      "email": "jwynterthomas@gmail.com",
+      "phone": "9084568305",
+      "is_vip": false,
+      "total_points": 220,
+      "vip_popcorn_last_redeemed_at": null,
+      "contact_id": 1
+    }
+  ],
+  "Actions": [
+    {
+      "action_id": 1,
+      "action_name": "Booth Visit",
+      "points_awarded": 10
+    },
+    {
+      "action_id": 2,
+      "action_name": "Provide Name",
+      "points_awarded": 5
+    },
+    {
+      "action_id": 3,
+      "action_name": "Provide Email",
+      "points_awarded": 15
+    },
+    {
+      "action_id": 4,
+      "action_name": "Provide Phone",
+      "points_awarded": 15
+    },
+    {
+      "action_id": 5,
+      "action_name": "Follow Gudessence IG",
+      "points_awarded": 20
+    },
+    {
+      "action_id": 6,
+      "action_name": "Follow Gudessence TikTok",
+      "points_awarded": 20
+    },
+    {
+      "action_id": 7,
+      "action_name": "Follow Gudessence Facebook",
+      "points_awarded": 15
+    },
+    {
+      "action_id": 8,
+      "action_name": "Follow Gudessence X",
+      "points_awarded": 15
+    },
+    {
+      "action_id": 9,
+      "action_name": "Follow Gudessence Snapchat",
+      "points_awarded": 15
+    },
+    {
+      "action_id": 10,
+      "action_name": "Social Media Story Post",
+      "points_awarded": 30
+    },
+    {
+      "action_id": 11,
+      "action_name": "Social Media Feed Post",
+      "points_awarded": 50
+    },
+    {
+      "action_id": 12,
+      "action_name": "Enter Giveaway",
+      "points_awarded": 25
+    },
+    {
+      "action_id": 13,
+      "action_name": "Google Review",
+      "points_awarded": 150
+    },
+    {
+      "action_id": 14,
+      "action_name": "Apple Maps Review",
+      "points_awarded": 150
+    }
+  ],
+  "UserActions": [
+    {
+      "contact_id": 1,
+      "action_id": 1,
+      "timestamp": "2026-04-02T13:55:00.588Z",
+      "useraction_id": 1
+    },
+    {
+      "contact_id": 1,
+      "action_id": 2,
+      "timestamp": "2026-04-02T13:55:00.595Z",
+      "useraction_id": 2
+    },
+    {
+      "contact_id": 1,
+      "action_id": 3,
+      "timestamp": "2026-04-02T13:55:00.596Z",
+      "useraction_id": 3
+    },
+    {
+      "contact_id": 1,
+      "action_id": 4,
+      "timestamp": "2026-04-02T13:55:00.597Z",
+      "useraction_id": 4
+    },
+    {
+      "contact_id": 1,
+      "action_id": 12,
+      "timestamp": "2026-04-02T13:56:00.113Z",
+      "useraction_id": 5
+    },
+    {
+      "contact_id": 1,
+      "action_id": 13,
+      "timestamp": "2026-04-02T14:24:49.738Z",
+      "useraction_id": 6
+    }
+  ],
+  "Giveaways": [
+    {
+      "giveaway_id": 1,
+      "giveaway_name": "Night Market Grand Prize",
+      "description": "Winner takes all!"
+    }
+  ],
+  "GiveawayEntries": [
+    {
+      "contact_id": 1,
+      "giveaway_id": 1,
+      "entry_time": "2026-04-02T13:56:00.092Z",
+      "is_winner": false,
+      "giveawayentrie_id": 1
+    },
+    {
+      "contact_id": 1,
+      "giveaway_id": 1,
+      "entry_time": "2026-04-02T14:24:49.741Z",
+      "is_winner": false,
+      "source": "Task: Google Review",
+      "giveawayentrie_id": 2
+    }
+  ]
+}
