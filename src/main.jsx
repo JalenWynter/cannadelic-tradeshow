@@ -518,9 +518,9 @@ const InfusedMenu = ({ onBack }) => {
       title: "Seasoning Kits",
       accent: "var(--electric-violet)",
       items: [
-        { name: "Sweet Kit: 4 Pack + Raffle Ticket", price: "$25", pairing: "Pairs well with Kush" },
-        { name: "Savory Kit: 4 Pack + Raffle Ticket", price: "$25", pairing: "Try with Lemon Ginger Sugar" },
-        { name: "Individual Seasoning + Raffle Ticket", price: "$8 or 2 for $10" }
+        { name: "Sweet Kit: 3 Pack + Raffle Ticket", price: "$25", pairing: "Pairs well with Kush" },
+        { name: "Savory Kit: 3 Pack + Raffle Ticket", price: "$25", pairing: "Try with Lemon Ginger Sugar" },
+        { name: "Individual Seasoning + Raffle Ticket", price: "$10" }
       ]
     },
     {
