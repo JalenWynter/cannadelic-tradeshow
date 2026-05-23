@@ -10,6 +10,13 @@ NAMESPACE_ID="${NAMESPACE_ID:-10}"
 PROJECT_NAME="${PROJECT_NAME:-gudessence-tradeshow-app}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+if [[ -f "$ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
+
 if [[ -z "${GITLAB_TOKEN:-}" ]]; then
   echo "ERROR: Set GITLAB_TOKEN (Personal Access Token with api scope)."
   echo "Create at: ${GITLAB_HOST}/-/user_settings/personal_access_tokens"

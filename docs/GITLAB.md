@@ -3,7 +3,7 @@
 ## Create the project (one-time)
 
 1. Open [New project — namespace 10](https://gitlab.gudessence.dev/projects/new?namespace_id=10).
-2. Project name: `gudessence-tradeshow-app`
+2. Project name: `tradeshow-cannadelic-app` (subgroup `gudessence-tech/app-sandbox`)
 3. Visibility: **Private**
 4. Uncheck “Initialize repository with a README” if pushing an existing repo.
 
@@ -11,7 +11,7 @@
 
 ```bash
 cd gudessence-tradeshow-app
-git remote add gitlab https://gitlab.gudessence.dev/<your-group>/gudessence-tradeshow-app.git
+git remote add gitlab git@gitlab.gudessence.dev:gudessence-tech/app-sandbox/tradeshow-cannadelic-app.git
 git push -u gitlab main
 ```
 
