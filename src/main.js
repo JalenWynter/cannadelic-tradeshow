@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, powerSaveBlocker, session } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, powerSaveBlocker, session, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -8,6 +8,44 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const userDataPath = app.getPath('userData');
+
+// --- Staff roster (PINs live only on disk / main process) ---
+let staffRoster = [];
+
+function getStaffRosterPaths() {
+  const projectRoot = path.join(__dirname, '..');
+  return {
+    user: path.join(userDataPath, 'staff.roster.json'),
+    example: path.join(projectRoot, 'config', 'staff.roster.example.json'),
+  };
+}
+
+function loadStaffRoster() {
+  const { user: userPath, example: examplePath } = getStaffRosterPaths();
+  try {
+    if (!fs.existsSync(userPath) && fs.existsSync(examplePath)) {
+      fs.mkdirSync(userDataPath, { recursive: true });
+      fs.copyFileSync(examplePath, userPath);
+      console.warn('Seeded staff.roster.json from example — change PINs before the event.');
+    }
+    if (fs.existsSync(userPath)) {
+      const parsed = JSON.parse(fs.readFileSync(userPath, 'utf-8'));
+      if (Array.isArray(parsed)) {
+        staffRoster = parsed.filter((s) => s?.name && s?.pin);
+        return;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load staff roster:', err.message);
+  }
+  staffRoster = [];
+}
+
+function validateStaffPin(name, pin) {
+  if (!name || pin == null) return false;
+  const entry = staffRoster.find((s) => s.name === name);
+  return Boolean(entry && String(entry.pin) === String(pin));
+}
 
 let windows = [];
 
@@ -221,6 +259,12 @@ ipcMain.handle('get-kiosk-id', (event) => {
   return getKioskId(event.sender);
 });
 
+ipcMain.handle('get-staff-names', () => staffRoster.map((s) => s.name));
+
+ipcMain.handle('validate-staff-pin', (event, { name, pin }) => {
+  return validateStaffPin(name, pin);
+});
+
 ipcMain.handle('json-db-get', async (event, { collection, filter }) => {
   const items = IN_MEMORY_DB[collection] || [];
   return items.find(item => Object.entries(filter).every(([k, v]) => {
@@ -401,6 +445,7 @@ ipcMain.handle('wipe-all-data', async (event) => {
 });
 
 function createWindows() {
+  loadStaffRoster();
   initDB(); // Load cache before windows open
 
   // Security: Clear all local sessions on app boot to ensure every day starts fresh
@@ -445,6 +490,17 @@ function createWindows() {
     windows.push(win);
   });
 }
+
+ipcMain.on('open-external', (event, url) => {
+  if (typeof url !== 'string') return;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return;
+    shell.openExternal(url);
+  } catch {
+    // ignore invalid URLs
+  }
+});
 
 app.whenReady().then(createWindows);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

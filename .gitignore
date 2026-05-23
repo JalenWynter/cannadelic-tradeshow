@@ -1,9 +1,15 @@
 node_modules
 dist
 dist-electron
-backups
+release
 .env
+.env.local
 *.db
 *.db-journal
 .DS_Store
 .vite-temp
+
+# Production snapshots and secrets
+src/backups/
+staff.roster.json
+config/staff.roster.json

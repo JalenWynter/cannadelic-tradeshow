@@ -14,5 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLastBackupTime: () => ipcRenderer.invoke('get-last-backup-time'),
   getNextBackupTime: () => ipcRenderer.invoke('get-next-backup-time'),
   getBackupSize: () => ipcRenderer.invoke('get-backup-size'),
+  getStaffNames: () => ipcRenderer.invoke('get-staff-names'),
+  validateStaffPin: (name, pin) => ipcRenderer.invoke('validate-staff-pin', { name, pin }),
   openURL: (url) => ipcRenderer.send('open-external', url)
 });

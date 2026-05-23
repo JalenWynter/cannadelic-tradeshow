@@ -1,5 +1,9 @@
 # GŪDESSENCE Tradeshow Kiosk App
 
+**Internal documentation:** [docs/README.md](./docs/README.md) — architecture, security, network, runbooks, and deployment for IT/systems teams.
+
+**Source of truth (GitLab):** `https://gitlab.gudessence.dev` — group namespace ID `10`, project `gudessence-tradeshow-app`.
+
 > ### ⚠️ **WINDOWS QUICK START (FOR THE SHOW)** ⚠️
 > **1. Install [Node.js (LTS)](https://nodejs.org/) and [Git](https://git-scm.com/)**
 > **2. Open terminal and run:**
@@ -93,7 +97,7 @@ The **GŪDESSENCE Tradeshow App** is a high-performance, dual-terminal kiosk sys
 ### Accessing the Staff Portal
 1.  On the **Home Screen**, scroll to the bottom and tap the small, subtle "Staff Portal" text.
 2.  Select your name from the dropdown.
-3.  Enter your unique **4-digit PIN** (e.g., Jalen: 1004, Ed: 1003).
+3.  Enter your unique **4-digit PIN** (configured in `%AppData%\gudessence-tradeshow-app\staff.roster.json` — see [docs/security.md](./docs/security.md)).
 
 ### Common Staff Tasks
 

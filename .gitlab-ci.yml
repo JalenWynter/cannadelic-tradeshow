@@ -1,0 +1,50 @@
+# GitLab CI — GŪDESSENCE Tradeshow App
+# Requires: Node 20+ runner with npm
+
+stages:
+  - validate
+  - build
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .npm/
+    - node_modules/
+
+validate:audit:
+  stage: validate
+  image: node:20-bookworm
+  script:
+    - npm ci
+    - npm audit --audit-level=high || true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+validate:lint-docs:
+  stage: validate
+  image: alpine:3.19
+  script:
+    - test -f docs/README.md
+    - test -f docs/architecture.md
+    - test -f SECURITY.md
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:vite:
+  stage: build
+  image: node:20-bookworm
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+      - dist-electron/
+    expire_in: 7 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

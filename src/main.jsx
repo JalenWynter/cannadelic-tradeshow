@@ -35,11 +35,6 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// --- Staff Configuration ---
-const STAFF_LIST = [
-  { name: 'Amina', pin: '1001' }, { name: 'Jas', pin: '1002' }, { name: 'Ed', pin: '1003' }, { name: 'Jalen', pin: '1004' }, { name: 'Brandon', pin: '1005' }, { name: 'Stella', pin: '1006' }, { name: 'Amanda', pin: '1007' }
-];
-
 // --- Keyboard Components ---
 
 const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = 'default', maxLength }) => {
@@ -183,14 +178,14 @@ const Notification = ({ message, type, onClose }) => {
     );
 };
 
-const StaffApprovalModal = ({ isOpen, onClose, onApprove, actionName, onFocusInput, setNotify }) => {
+const StaffApprovalModal = ({ isOpen, onClose, onApprove, actionName, onFocusInput, setNotify, staffNames }) => {
   const [selectedStaff, setSelectedStaff] = useState('');
   const [pin, setPin] = useState('');
   if (!isOpen) return null;
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const staff = STAFF_LIST.find(s => s.name === selectedStaff);
-    if (staff && pin === staff.pin) { onApprove(staff.name); onClose(); setPin(''); setSelectedStaff(''); } 
+    const ok = await window.electronAPI.validateStaffPin(selectedStaff, pin);
+    if (ok) { onApprove(selectedStaff); onClose(); setPin(''); setSelectedStaff(''); }
     else { playSound('error'); setNotify({ message: 'Invalid PIN', type: 'error' }); }
   };
   return (
@@ -200,7 +195,7 @@ const StaffApprovalModal = ({ isOpen, onClose, onApprove, actionName, onFocusInp
         <p style={{ margin: '15px 0' }}>Action: <strong>{actionName}</strong></p>
         <form onSubmit={handleSubmit}>
           <CustomDropdown 
-            options={STAFF_LIST.map(s => s.name)} 
+            options={staffNames} 
             value={selectedStaff} 
             onChange={setSelectedStaff} 
             placeholder="Choose Staff..." 
@@ -1042,7 +1037,7 @@ const GiveawayPackage = () => (
   </div>
 );
 
-const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInput }) => {
+const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInput, staffNames }) => {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [activeContact, setActiveContact] = useState(null);
@@ -1124,7 +1119,7 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
 
   return (
     <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
-      <StaffApprovalModal isOpen={!!approvalTarget} actionName={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={handleApproveAction} onFocusInput={onFocusInput} setNotify={setNotify} />
+      <StaffApprovalModal isOpen={!!approvalTarget} actionName={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={handleApproveAction} onFocusInput={onFocusInput} setNotify={setNotify} staffNames={staffNames} />
       
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
@@ -1188,7 +1183,7 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
   );
 };
 
-const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput }) => {
+const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames }) => {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [status, setStatus] = useState(null);
@@ -1235,7 +1230,7 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput }) => {
 
   return (
     <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
-      <StaffApprovalModal isOpen={!!approvalTarget} actionName={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={approvalTarget === 'VIP UPGRADE' ? handleVipUpgrade : handleClaimFlower} onFocusInput={onFocusInput} setNotify={setNotify} />
+      <StaffApprovalModal isOpen={!!approvalTarget} actionName={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={approvalTarget === 'VIP UPGRADE' ? handleVipUpgrade : handleClaimFlower} onFocusInput={onFocusInput} setNotify={setNotify} staffNames={staffNames} />
       <h2 className="neon-text-pink" style={{ textAlign: 'center', marginBottom: '40px' }}>VIP Lounge</h2>
       {!status ? (
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -1290,13 +1285,13 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput }) => {
   );
 };
 
-const StaffLogin = ({ onBack, onLoginSuccess, onFocusInput, setNotify }) => {
+const StaffLogin = ({ onBack, onLoginSuccess, onFocusInput, setNotify, staffNames }) => {
   const [selectedStaff, setSelectedStaff] = useState('');
   const [pin, setPin] = useState('');
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const staff = STAFF_LIST.find(s => s.name === selectedStaff);
-    if (staff && pin === staff.pin) { playSound('confirm'); onLoginSuccess(staff.name); }
+    const ok = await window.electronAPI.validateStaffPin(selectedStaff, pin);
+    if (ok) { playSound('confirm'); onLoginSuccess(selectedStaff); }
     else { playSound('error'); setNotify({ message: 'Invalid PIN', type: 'error' }); }
   };
   return (
@@ -1305,7 +1300,7 @@ const StaffLogin = ({ onBack, onLoginSuccess, onFocusInput, setNotify }) => {
         <h3 className="neon-text-pink">Staff Portal</h3>
         <form onSubmit={handleLogin}>
           <CustomDropdown 
-            options={STAFF_LIST.map(s => s.name)} 
+            options={staffNames} 
             value={selectedStaff} 
             onChange={setSelectedStaff} 
             placeholder="Choose Name..." 
@@ -1514,8 +1509,9 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
   };
 
   const handleWipe = async () => {
-    const staff = STAFF_LIST.find(s => s.name === staffName);
-    if (wipePin1 === staff.pin && wipePin2 === staff.pin) { await api.wipeAllData(); setNotify({ message: 'DATA WIPED', type: 'error' }); setTimeout(() => window.location.reload(), 1000); } 
+    const ok1 = await window.electronAPI.validateStaffPin(staffName, wipePin1);
+    const ok2 = await window.electronAPI.validateStaffPin(staffName, wipePin2);
+    if (ok1 && ok2) { await api.wipeAllData(); setNotify({ message: 'DATA WIPED', type: 'error' }); setTimeout(() => window.location.reload(), 1000); }
     else { setNotify({ message: 'PIN mismatch', type: 'error' }); }
   };
 
@@ -2181,6 +2177,7 @@ const FlavorVote = ({ contactId, onBack, setNotify }) => {
 const App = () => {
   const [view, setView] = useState('home');
   const [kioskId, setKioskId] = useState('');
+  const [staffNames, setStaffNames] = useState([]);
   const [activeStaff, setActiveStaff] = useState(null);
   const [currentContactId, setCurrentContactId] = useState(null);
   const [currentContactName, setCurrentContactName] = useState(null);
@@ -2213,6 +2210,10 @@ const App = () => {
 
     return () => clearInterval(randomCheck);
   }, [currentContactId, activeStaff, showVipModal, view]);
+
+  useEffect(() => {
+    window.electronAPI.getStaffNames().then(setStaffNames).catch(() => setStaffNames([]));
+  }, []);
 
   useEffect(() => {
     const fetchKioskId = async () => {
@@ -2359,10 +2360,10 @@ const App = () => {
         {view === 'register' && <CheckIn onBack={() => navigate('home')} onSuccess={handleCheckInSuccess} onFocusInput={openKeyboard} />}
         {view === 'thank-you' && <ThankYou name={currentContactFirstName || currentContactName} isNew={isNewUser} onContinue={() => navigate('main-menu')} />}
         {view === 'profile' && <Profile contactId={currentContactId} onNavigate={navigate} />}
-        {view === 'giveaway' && <GiveawayEntry contactId={currentContactId} onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} />}
-        {view === 'vip' && <VipLounge onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} />}
+        {view === 'giveaway' && <GiveawayEntry contactId={currentContactId} onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
+        {view === 'vip' && <VipLounge onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
         
-        {view === 'staff-login' && <StaffLogin onBack={() => navigate('home')} onLoginSuccess={(name) => { setActiveStaff(name); navigate('staff-dashboard'); }} onFocusInput={openKeyboard} setNotify={setNotify} />}
+        {view === 'staff-login' && <StaffLogin onBack={() => navigate('home')} onLoginSuccess={(name) => { setActiveStaff(name); navigate('staff-dashboard'); }} onFocusInput={openKeyboard} setNotify={setNotify} staffNames={staffNames} />}
         {view === 'staff-dashboard' && <StaffDashboard onLogout={() => { setActiveStaff(null); navigate('home'); }} staffName={activeStaff} setNotify={setNotify} onFocusInput={openKeyboard} />}
         
         {view !== 'home' && view !== 'thank-you' && (
