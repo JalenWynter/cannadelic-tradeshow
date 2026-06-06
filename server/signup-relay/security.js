@@ -54,15 +54,34 @@ export function findExistingSignup(signups, eventId, email, phone) {
   });
 }
 
+function displayPrefixForEventId(eventId) {
+  const id = String(eventId || '');
+  if (id.includes('colombia-retreat')) return 'COL';
+  if (id.includes('cannadelic')) return 'CND';
+  return 'GE';
+}
+
+function collectUsedDisplayIds(signups, eventId) {
+  const used = new Set();
+  for (const signup of signups) {
+    if (signup.eventId !== eventId || !signup.displayId) continue;
+    used.add(String(signup.displayId).trim().toUpperCase());
+  }
+  return used;
+}
+
 export function nextDisplayId(signups, eventId) {
   const eventSignups = signups.filter((s) => s.eventId === eventId);
+  const used = collectUsedDisplayIds(signups, eventId);
   const maxNum = eventSignups.reduce((max, s) => Math.max(max, s.displayNumber || 0), 0);
-  const displayNumber = maxNum + 1;
-  const prefix = eventId.includes('cannadelic') ? 'CND' : 'GE';
-  return {
-    displayNumber,
-    displayId: `${prefix}-${String(displayNumber).padStart(5, '0')}`,
-  };
+  const prefix = displayPrefixForEventId(eventId);
+  let displayNumber = maxNum + 1;
+  let displayId = `${prefix}-${String(displayNumber).padStart(5, '0')}`;
+  while (used.has(displayId)) {
+    displayNumber += 1;
+    displayId = `${prefix}-${String(displayNumber).padStart(5, '0')}`;
+  }
+  return { displayNumber, displayId };
 }
 
 export function publicSignupPayload(signup) {

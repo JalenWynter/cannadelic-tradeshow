@@ -1,20 +1,145 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import './home-animations.css';
 import api from './api';
 import playSound from './sound';
 import { QRCodeCanvas } from 'qrcode.react';
+import { HomeMenuCard, HomeMenuRow, HomeRetreatCard } from './components/HomeMenuCard.jsx';
+import { AnimatedBrandTitle } from './components/AnimatedBrandTitle.jsx';
+import { COLOMBIA_RETREAT_HERO_IMAGE } from './colombiaRetreatMedia.js';
 
 // --- Giveaway Configuration ---
 const GIVEAWAY_PACKAGE = [
   "Sauna Blanket",
-  "SmokenYoga Class (April 10th or April 24th)",
   "Free Greenroom Event Class (+1 for a friend)",
   "Exclusive Discounts",
   "Merch + Swag (Stickers etc.)",
   "Signature Seasoning Kit",
-  "Wellness Stoner Basket (Bluetooth speaker, snacks, yoga mat, candles, etc.)"
+  "Wellness Stoner Basket (Bluetooth speaker, snacks, yoga mat, candles, etc.)",
 ];
+
+const VIP_POINTS_THRESHOLD = 500;
+const POPCORN_COOLDOWN_MS = 600000;
+
+const VIP_EXPERIENCE_PERKS = [
+  'Gold wristband',
+  '10% off everything at booth',
+  'Free Popcorn ♨️ (every 10 min)',
+  '2 free raffle entries',
+  '+1G Free 🌸',
+];
+
+/** Earn-points tasks — points must match DB_Settings.json Actions */
+const EARN_POINTS_TASKS = [
+  {
+    actionName: 'Google Review',
+    title: 'Google Review',
+    points: 150,
+    raffleEntry: true,
+    verifyLabel: 'Find Guest & Verify',
+    verifyType: 'staff',
+    qrUrl: 'https://search.google.com/local/writereview?placeid=ChIJRYOSq0vzwogRnYP5n_UBNkQ',
+    qrCaption: 'Scan to review',
+  },
+  {
+    actionName: 'YouTube Subscription',
+    title: 'YouTube Subscribe',
+    points: 150,
+    raffleEntry: true,
+    verifyLabel: 'Find Guest & Verify',
+    verifyType: 'staff',
+    qrUrl: 'https://www.youtube.com/@GUDESSENCE?sub_confirmation=1',
+    qrCaption: 'Scan to subscribe',
+  },
+  {
+    actionName: 'Social Media Story Post',
+    title: 'IG Story Post',
+    points: 30,
+    raffleEntry: true,
+    verifyLabel: 'Find Guest & Verify',
+    verifyType: 'staff',
+    qrUrl: 'https://www.instagram.com/gudessence.clearwater/',
+    qrCaption: 'Scan to follow / tag',
+  },
+  {
+    actionName: 'Seasoning Vote',
+    title: 'Flavor Vote',
+    points: 50,
+    raffleEntry: false,
+    verifyLabel: 'Rate a Flavor',
+    verifyType: 'navigate',
+    navigateTo: 'vote',
+  },
+  {
+    actionName: 'Booth Visit',
+    title: 'Booth Check-In',
+    points: 10,
+    raffleEntry: false,
+    verifyLabel: 'Automatic on register',
+    verifyType: 'auto',
+  },
+];
+
+const GuestReferenceDisplay = ({ contact, declined = false, monospace = true }) => {
+  const ref = api.contactReference(contact);
+  const legacy = api.legacyGuestReference(contact);
+  const prehistoric = api.isPrehistoricGuestReference(contact);
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+      <span
+        style={{
+          fontFamily: monospace ? 'ui-monospace, monospace' : 'inherit',
+          color: ref ? (declined ? 'rgba(255,255,255,0.45)' : 'var(--neon-lime)') : 'rgba(255,255,255,0.35)',
+        }}
+      >
+        {ref || '—'}
+      </span>
+      {prehistoric && legacy ? (
+        <span
+          title={`Prehistoric reference: ${legacy}`}
+          style={{
+            display: 'inline-block',
+            padding: '2px 6px',
+            borderRadius: '999px',
+            fontSize: '0.62rem',
+            fontWeight: 'bold',
+            letterSpacing: '0.04em',
+            background: 'rgba(255,165,0,0.15)',
+            color: '#ffb347',
+            border: '1px solid rgba(255,165,0,0.35)',
+          }}
+        >
+          PREHISTORIC
+        </span>
+      ) : null}
+    </span>
+  );
+};
+
+const ColombiaRetreatBadge = ({ contact, compact = false }) => {
+  if (!api.isColombiaRetreatInterested(contact) && !contact?.colombia) return null;
+  const source = contact?.colombia_retreat_source;
+  const label = source === 'kiosk_early_bird' ? 'EARLY BIRD' : 'RETREAT';
+  return (
+    <span
+      title={source ? api.colombiaRetreatSourceLabel(source) : 'Colombia retreat interest'}
+      style={{
+        display: 'inline-block',
+        padding: compact ? '2px 6px' : '3px 8px',
+        borderRadius: '999px',
+        fontSize: compact ? '0.62rem' : '0.68rem',
+        fontWeight: 'bold',
+        letterSpacing: '0.04em',
+        background: 'rgba(255,140,0,0.15)',
+        color: '#ffb347',
+        border: '1px solid rgba(255,140,0,0.35)',
+      }}
+    >
+      🇨🇴 {label}
+    </span>
+  );
+};
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component {
@@ -223,6 +348,7 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
 
 const CustomDropdown = ({ options, value, onChange, placeholder = "Select..." }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const safeOptions = Array.isArray(options) ? options : [];
   return (
     <div style={{ position: 'relative', width: '100%', marginBottom: '20px' }}>
       <button 
@@ -241,7 +367,7 @@ const CustomDropdown = ({ options, value, onChange, placeholder = "Select..." })
           borderRadius: '10px', zIndex: 5000, marginTop: '5px',
           maxHeight: '250px', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
         }}>
-          {options.map(opt => (
+          {safeOptions.map(opt => (
             <div 
               key={opt} 
               onClick={() => { onChange(opt); setIsOpen(false); playSound('click'); }}
@@ -255,6 +381,66 @@ const CustomDropdown = ({ options, value, onChange, placeholder = "Select..." })
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+const CONTACT_SEARCH_MIN_LENGTH = 1;
+const CONTACT_SEARCH_DEBOUNCE_MS = 200;
+
+function useContactSearch({ minLength = CONTACT_SEARCH_MIN_LENGTH, debounceMs = CONTACT_SEARCH_DEBOUNCE_MS, limit = 30 } = {}) {
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const searchTimeout = useRef(null);
+
+  const handleSearch = useCallback((val) => {
+    setSearch(val);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    const trimmed = String(val || '').trim();
+    if (trimmed.length < minLength) {
+      setSearchResults([]);
+      return;
+    }
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        setSearchResults(await api.searchContacts(trimmed, limit));
+      } catch {
+        setSearchResults([]);
+      }
+    }, debounceMs);
+  }, [minLength, debounceMs, limit]);
+
+  const clearSearch = useCallback(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    setSearch('');
+    setSearchResults([]);
+  }, []);
+
+  return { search, searchResults, handleSearch, clearSearch, setSearch, setSearchResults };
+}
+
+function formatContactSearchLine(contact) {
+  const ref = api.contactReference(contact);
+  const contactLine = contact.email || contact.phone || '—';
+  return ref ? `${contactLine} · ${ref}` : contactLine;
+}
+
+const ContactSearchResults = ({ results, onSelect, hint = 'Matches from attendee list — tap to select' }) => {
+  if (!results?.length) return null;
+  return (
+    <div className="contact-search-results">
+      <p className="contact-search-results__hint">{hint}</p>
+      {results.map((contact) => (
+        <button
+          type="button"
+          key={contact.contact_id}
+          className="contact-search-results__item"
+          onClick={() => { playSound('click'); onSelect(contact); }}
+        >
+          <strong>{contact.name}</strong>
+          <span>{formatContactSearchLine(contact)}</span>
+        </button>
+      ))}
     </div>
   );
 };
@@ -323,32 +509,164 @@ const StaffApprovalModal = ({ isOpen, onClose, onApprove, actionName, onFocusInp
   );
 };
 
+const usePopcornCooldown = (lastRedeemed) => {
+  const [ready, setReady] = useState(true);
+  const [timeLeft, setTimeLeft] = useState(null);
+
+  useEffect(() => {
+    const update = () => {
+      if (!lastRedeemed) {
+        setReady(true);
+        setTimeLeft(null);
+        return;
+      }
+      const diff = POPCORN_COOLDOWN_MS - (Date.now() - new Date(lastRedeemed).getTime());
+      if (diff <= 0) {
+        setReady(true);
+        setTimeLeft('0:00');
+      } else {
+        setReady(false);
+        const mins = Math.floor(diff / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        setTimeLeft(`${mins}:${secs.toString().padStart(2, '0')}`);
+      }
+    };
+    update();
+    const i = setInterval(update, 1000);
+    return () => clearInterval(i);
+  }, [lastRedeemed]);
+
+  return { ready, timeLeft };
+};
+
 const RefillCountdown = ({ lastRedeemed }) => {
-    const [timeLeft, setTimeLeft] = useState(null);
-    useEffect(() => {
-        const update = () => {
-            if (!lastRedeemed) return;
-            const diff = 600000 - (new Date() - new Date(lastRedeemed));
-            if (diff <= 0) { setTimeLeft(0); }
-            else {
-                const mins = Math.floor(diff / 60000);
-                const secs = Math.floor((diff % 60000) / 1000);
-                setTimeLeft(`${mins}:${secs.toString().padStart(2, '0')}`);
-            }
-        };
-        update();
-        const i = setInterval(update, 1000);
-        return () => clearInterval(i);
-    }, [lastRedeemed]);
-    if (timeLeft === 0) return <p className="neon-text-lime" style={{ fontWeight: 'bold' }}>REFILL READY!</p>;
-    if (!timeLeft) return null;
+  const { ready, timeLeft } = usePopcornCooldown(lastRedeemed);
+  if (ready) return <p className="neon-text-lime" style={{ fontWeight: 'bold', margin: 0 }}>REFILL READY!</p>;
+  return (
+    <div>
+      <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: '0 0 4px' }}>Next refill in</p>
+      <p className="neon-text-pink" style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: 0 }}>{timeLeft}</p>
+    </div>
+  );
+};
+
+const PopcornRefillPanel = ({ contact, staffName, onDistributed, setNotify, compact = false }) => {
+  const [dose, setDose] = useState('low');
+  const [loading, setLoading] = useState(false);
+  const { ready, timeLeft } = usePopcornCooldown(contact?.vip_popcorn_last_redeemed_at);
+
+  if (!contact?.is_vip) {
     return (
-        <div>
-            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>Next Refill In:</p>
-            <p className="neon-text-pink" style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{timeLeft}</p>
-        </div>
+      <p style={{ margin: 0, opacity: 0.65, fontSize: compact ? '0.85rem' : '0.95rem' }}>
+        Guest is not VIP — grant VIP status first to enable popcorn refills.
+      </p>
     );
-}
+  }
+
+  const handleDistribute = async () => {
+    if (!ready || loading) return;
+    setLoading(true);
+    try {
+      await api.redeemPopcorn(contact.contact_id, staffName, dose);
+      playSound('vip');
+      setNotify?.({
+        message: `Popcorn (${dose} dose) marked for ${contact.name}`,
+        type: 'success',
+      });
+      onDistributed?.(contact.contact_id);
+    } catch (err) {
+      playSound('error');
+      setNotify?.({ message: err.message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        padding: compact ? '14px' : '18px',
+        borderRadius: '12px',
+        border: ready ? '1px solid var(--neon-lime)' : '1px solid rgba(255, 0, 127, 0.35)',
+        background: ready ? 'rgba(204, 255, 0, 0.06)' : 'rgba(255, 0, 127, 0.06)',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '14px' }}>
+        <div>
+          <p style={{ margin: '0 0 4px', fontSize: '0.75rem', opacity: 0.55, textTransform: 'uppercase' }}>VIP Popcorn Refill</p>
+          <p style={{ margin: 0, fontSize: compact ? '0.85rem' : '0.95rem', opacity: 0.75 }}>
+            1 refill every 10 minutes · low or high dose
+          </p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          {ready ? (
+            <span style={{ color: 'var(--neon-lime)', fontWeight: 'bold', fontSize: compact ? '0.9rem' : '1rem' }}>Ready now</span>
+          ) : (
+            <>
+              <p style={{ margin: '0 0 2px', fontSize: '0.75rem', opacity: 0.55 }}>Cooldown</p>
+              <span className="neon-text-pink" style={{ fontWeight: 'bold', fontSize: compact ? '1.1rem' : '1.35rem' }}>{timeLeft}</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {contact.vip_popcorn_last_redeemed_at && (
+        <p style={{ margin: '0 0 14px', fontSize: '0.8rem', opacity: 0.60 }}>
+          Last distributed: {api.formatCivilianTime(contact.vip_popcorn_last_redeemed_at)}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+        {['low', 'high'].map((option) => (
+          <button
+            key={option}
+            type="button"
+            className="btn"
+            style={{
+              flex: 1,
+              margin: 0,
+              padding: compact ? '8px 10px' : '10px 12px',
+              fontSize: '0.85rem',
+              background: dose === option ? 'rgba(204, 255, 0, 0.15)' : 'transparent',
+              border: dose === option ? '1px solid var(--neon-lime)' : '1px solid var(--glass-border)',
+              color: dose === option ? 'var(--neon-lime)' : 'rgba(255,255,255,0.75)',
+            }}
+            onClick={() => { playSound('click'); setDose(option); }}
+          >
+            {option === 'low' ? 'Low dose' : 'High dose'}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        className="btn btn-lime"
+        style={{ width: '100%', margin: 0, opacity: ready && !loading ? 1 : 0.45 }}
+        disabled={!ready || loading}
+        onClick={handleDistribute}
+      >
+        {loading ? 'Saving…' : ready ? 'Mark Popcorn Distributed' : `Wait ${timeLeft}`}
+      </button>
+    </div>
+  );
+};
+
+const PopcornStatusChip = ({ isVip, lastRedeemed }) => {
+  const { ready, timeLeft } = usePopcornCooldown(lastRedeemed);
+  if (!isVip) return <span style={{ opacity: 0.25, fontSize: '0.8rem' }}>—</span>;
+  if (ready) {
+    return (
+      <span style={{ color: 'var(--neon-lime)', fontSize: '0.75rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+        Ready
+      </span>
+    );
+  }
+  return (
+    <span className="neon-text-pink" style={{ fontSize: '0.75rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+      {timeLeft}
+    </span>
+  );
+};
 
 // --- Views ---
 
@@ -364,8 +682,9 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
       setTotalEntries(counts.reduce((a, b) => a + b, 0));
       
       if (currentContactId) {
+        const contact = await api.getContactById(currentContactId);
         const actions = await api.getCompletedActions(currentContactId);
-        setHasRetreat(actions.includes('Retreat Interest'));
+        setHasRetreat(api.isColombiaRetreatInterested(contact) || actions.includes('Retreat Interest'));
       }
     };
     fetchTotal();
@@ -378,7 +697,7 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
     if (!currentContactId) return onNavigate('register');
     setLoading(true);
     try {
-      await api.verifyAndAwardAction(currentContactId, 'Retreat Interest', 'System');
+      await api.markColombiaRetreatInterest(currentContactId, 'home_one_tap', 'System');
       setHasRetreat(true);
       if (setNotify) setNotify({ message: 'Success! Colombia Interest Logged.', type: 'success' });
     } catch (err) {
@@ -388,205 +707,191 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
     }
   };
 
+  const go = (view) => {
+    playSound('click');
+    onNavigate(view);
+  };
+
   return (
-    <div className="view-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', minHeight: '100%' }}>
-      <header style={{ textAlign: 'center', marginBottom: '40px' }}>
-        <h1 className="neon-text-lime" style={{ fontSize: '4rem', marginBottom: '0.5rem', fontWeight: '900', letterSpacing: '2px' }}>GŪDESSENCE</h1>
-        <h2 className="neon-text-violet" style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Cannadelic Night Market</h2>
+    <div className="view-container home-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', minHeight: '100%' }}>
+      <header className="home-header">
+        <AnimatedBrandTitle />
+        <h2 className="neon-text-violet home-header__event home-header__event--pulse">Cannadelic Night Market</h2>
+        <p className="home-header__url">gudessence.com</p>
       </header>
-      
-      <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
+
+      <div className="home-greeting home-greeting--fade">
         {currentContactName ? (
-          <div className="neon-text-lime" style={{ fontSize: '1.5rem', background: 'rgba(204, 255, 0, 0.1)', padding: '10px 30px', borderRadius: '50px', border: '1px solid var(--neon-lime)' }}>
-            Welcome, {currentContactName}!
-          </div>
+          <div className="neon-text-lime home-greeting__welcome">Welcome, {currentContactName}!</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
             <h2 className="neon-text-violet" style={{ fontSize: '1.5rem' }}>Hello There!</h2>
-            <p className="neon-text-lime" style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-              Welcome! Please check in or register to start earning points and entries.
+            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.85)', maxWidth: '420px', lineHeight: 1.45 }}>
+              Welcome to the Night Market. Start here to earn points &amp; entries.
             </p>
           </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '850px', padding: '0 20px', flex: 1 }}>
-        
-        {/* 1. PRIMARY ACTION: IDENTITY/REGISTRATION (Highest Importance) */}
-        <div style={{ width: '100%' }}>
-          {currentContactId ? (
-            <button className="btn btn-violet" style={{ width: '100%', height: '100px', margin: 0, background: 'rgba(204, 255, 0, 0.1)', border: '3px solid var(--neon-lime)' }} onClick={() => { playSound('click'); onNavigate('profile'); }}>
-              <div style={{ textAlign: 'center' }}>
-                <div className="neon-text-lime" style={{ fontSize: '1.6rem', fontWeight: 'bold' }}>View My Profile</div>
-                <div style={{ fontSize: '0.8rem', opacity: 0.8, textTransform: 'none', color: 'white' }}>Manage your points & rewards</div>
-              </div>
-            </button>
-          ) : (
-            <button className="btn btn-lime" style={{ width: '100%', height: '100px', margin: 0, boxShadow: '0 0 40px rgba(204, 255, 0, 0.4)', background: 'var(--neon-lime)', color: 'black' }} onClick={() => { playSound('click'); onNavigate('register'); }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.8rem', fontWeight: '900' }}>CHECK-IN / REGISTER</div>
-                <div style={{ fontSize: '0.9rem', opacity: 0.8, textTransform: 'none' }}>Start here to earn entries & exclusive perks</div>
-              </div>
-            </button>
-          )}
-        </div>
+      <div className="home-menu">
+        {/* 1. Check-in / profile (primary) */}
+        {currentContactId ? (
+          <HomeMenuCard
+            variant="profile"
+            iconSrc="/icons/profile-user.svg"
+            title="View My Profile"
+            subtitle="Manage your points & rewards"
+            onClick={() => go('profile')}
+            attentionIndex={0}
+          />
+        ) : (
+          <HomeMenuCard
+            variant="lime"
+            iconSrc="/icons/checkin-popcorn.svg"
+            iconRightSrc="/icons/checkin-popcorn.svg"
+            title="CHECK-IN / REGISTER"
+            subtitle="Get your pass for exclusive perks"
+            badge="🍿 Free sample"
+            textAlign="center"
+            onClick={() => go('register')}
+            attentionIndex={0}
+          />
+        )}
 
-        {/* 2. HIGH CONVERSION: COLOMBIA RETREAT (Marketing Priority) */}
-        <div style={{ width: '100%' }}>
-          <button className="btn" style={{ 
-            width: '100%', 
-            height: '130px', 
-            margin: 0, 
-            background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
-            border: 'none',
-            color: 'black',
-            position: 'relative'
-          }} onClick={() => { playSound('click'); onNavigate('colombia'); }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.6rem', fontWeight: '900' }}>🇨🇴 RETREAT TO COLOMBIA 🇨🇴</div>
-              <div style={{ fontSize: '1rem', fontWeight: 'bold', textTransform: 'none' }}>Early Bird: Save $500! (Luxury All-Inclusive)</div>
-              
-              {currentContactId && (
-                <div style={{ marginTop: '10px' }}>
-                  {hasRetreat ? (
-                    <span style={{ background: 'rgba(0,0,0,0.2)', padding: '5px 15px', borderRadius: '50px', fontSize: '0.8rem', fontWeight: 'bold' }}>✅ ON THE LIST</span>
-                  ) : (
-                    <button 
-                      className="btn btn-lime" 
-                      style={{ minWidth: 'auto', padding: '5px 20px', fontSize: '0.8rem', height: '35px', margin: 0, boxShadow: '0 5px 15px rgba(0,0,0,0.3)' }}
-                      onClick={handleQuickRetreat}
-                      disabled={loading}
-                    >
-                      {loading ? '...' : 'ONE-TAP SIGN UP'}
-                    </button>
-                  )}
-                </div>
+        {/* 2. Discover: event menu + rate flavor */}
+        <HomeMenuRow>
+          <HomeMenuCard
+            variant="glass-pink"
+            iconSrc="/icons/event-menu.svg"
+            title="EVENT MENU"
+            subtitle="Explore Popcorn & Merch"
+            onClick={() => go('main-menu')}
+            attentionIndex={1}
+          />
+          <HomeMenuCard
+            variant="glass-violet"
+            iconSrc="/icons/rate-flavor.svg"
+            title="RATE FLAVOR"
+            subtitle="Earn 50 Points on a review"
+            onClick={() => go('vote')}
+            attentionIndex={2}
+          />
+        </HomeMenuRow>
+
+        {/* 3. Engage: VIP + giveaway */}
+        <HomeMenuRow>
+          <HomeMenuCard
+            variant="pink"
+            iconSrc="/icons/vip-lounge.svg"
+            title="VIP LOUNGE"
+            subtitle="Exclusive Perks & Refills"
+            onClick={() => go('vip')}
+            attentionIndex={3}
+          />
+          <HomeMenuCard
+            variant="violet"
+            iconSrc="/icons/giveaway-hub.svg"
+            title="GIVEAWAY HUB"
+            subtitle="Earn Points → Unlock VIP"
+            onClick={() => go('giveaway')}
+            attentionIndex={4}
+          />
+        </HomeMenuRow>
+
+        {/* 4. Marketing: Colombia retreat */}
+        <HomeRetreatCard onClick={() => go('colombia')} attentionIndex={5}>
+          <span className="home-menu-card__title">RETREAT TO COLOMBIA 🇨🇴</span>
+          <span className="home-menu-card__subtitle home-menu-card__subtitle--retreat">
+            <span className="home-retreat-savings">Save $500!</span>
+            <span className="home-retreat-tag">All-inclusive luxury wellness retreat</span>
+          </span>
+          {currentContactId && (
+            <span className="home-retreat-extra">
+              {hasRetreat ? (
+                <span className="home-retreat-badge">✅ ON THE LIST</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-lime home-retreat-cta"
+                  data-retreat-nested
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuickRetreat(e);
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? '...' : 'ONE-TAP SIGN UP'}
+                </button>
               )}
-            </div>
-          </button>
-        </div>
+            </span>
+          )}
+        </HomeRetreatCard>
 
-        {/* 3. EXCLUSIVITY & ENGAGEMENT GRID (Secondary Importance) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          {/* VIP LOUNGE - High Contrast Pink */}
-          <button className="btn" style={{ height: '120px', margin: 0, background: 'var(--cyber-pink)', border: 'none', color: 'white', boxShadow: '0 0 20px rgba(255, 0, 127, 0.3)' }} onClick={() => { playSound('click'); onNavigate('vip'); }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>VIP LOUNGE</div>
-              <div style={{ fontSize: '0.8rem', opacity: 0.9, textTransform: 'none', marginTop: '5px' }}>Exclusive Perks & Refills</div>
-            </div>
-          </button>
-
-          {/* GIVEAWAY - Brand Violet */}
-          <button className="btn btn-violet" style={{ height: '120px', margin: 0, background: 'var(--electric-violet)', color: 'white', border: 'none' }} onClick={() => { playSound('click'); onNavigate('giveaway'); }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>GIVEAWAY HUB</div>
-              <div style={{ fontSize: '0.8rem', opacity: 0.9, textTransform: 'none', marginTop: '5px' }}>Win the Wellness Bundle</div>
-            </div>
-          </button>
-        </div>
-
-        {/* 4. INFO & SECONDARY GRID (Discovery) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          {/* EVENT MENU - Dark Glass */}
-          <button className="btn" style={{ height: '100px', margin: 0, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => { playSound('click'); onNavigate('main-menu'); }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.2rem' }}>EVENT MENU</div>
-              <div style={{ fontSize: '0.7rem', opacity: 0.7, textTransform: 'none' }}>Popcorn & Merch</div>
-            </div>
-          </button>
-
-          {/* RATE FLAVOR - Dark Glass */}
-          <button className="btn" style={{ height: '100px', margin: 0, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => { playSound('click'); onNavigate('vote'); }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.2rem' }}>RATE FLAVOR</div>
-              <div style={{ fontSize: '0.7rem', opacity: 0.7, textTransform: 'none' }}>Earn 50 Points</div>
-            </div>
-          </button>
-        </div>
-
-        {/* 5. UTILITY: ADD TICKET (Subtle) */}
-        <div style={{ width: '100%' }}>
-          <button className="btn" style={{ width: '100%', height: '70px', margin: 0, background: 'transparent', border: '1px dashed rgba(255,255,255,0.3)', opacity: 0.7 }} onClick={() => { playSound('click'); onNavigate('add-ticket'); }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.1rem' }}>Link Physical Ticket Number</div>
-            </div>
-          </button>
-        </div>
+        {/* 5. Utility: link ticket */}
+        <HomeMenuCard
+          variant="utility"
+          iconSrc="/icons/link-ticket.svg"
+          title="LINK PHYSICAL TICKET NUMBER"
+          onClick={() => go('add-ticket')}
+          textAlign="center"
+          attentionIndex={6}
+        />
       </div>
-      
-      <footer style={{ marginTop: '60px', paddingBottom: '20px', textAlign: 'center' }}>
-        <button style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.1)' }} onClick={() => { playSound('click'); onNavigate('staff-login'); }}>Staff Portal</button>
+
+      <footer style={{ marginTop: '48px', paddingBottom: '20px', textAlign: 'center' }}>
+        <button style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.1)' }} onClick={() => go('staff-login')}>Staff Portal</button>
       </footer>
     </div>
   );
 };
 
+const MenuRaffleBanner = ({ accent = 'var(--neon-lime)' }) => (
+  <div className="menu-raffle-banner" style={{ '--banner-accent': accent }} role="note">
+    <span className="menu-raffle-banner__icon" aria-hidden="true">🎟️</span>
+    <span className="menu-raffle-banner__title">Every purchase includes 1 raffle entry</span>
+  </div>
+);
+
+const MenuItemRaffleBadge = () => (
+  <span className="menu-item-raffle-badge">+1 Raffle Entry</span>
+);
+
 const MainMenu = ({ onNavigate }) => (
   <div className="view-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100%', padding: '60px 20px' }}>
-    <h2 className="neon-text-violet" style={{ marginBottom: '50px', fontSize: '2.5rem' }}>Select Event Menu</h2>
+    <h2 className="neon-text-violet" style={{ marginBottom: '24px', fontSize: '2.5rem' }}>Select Event Menu</h2>
+    <MenuRaffleBanner accent="var(--neon-lime)" />
     
     <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '1100px', width: '100%' }}>
-      {/* --- Infused Popcorn Card --- */}
-      <div 
-        className="card" 
-        style={{ 
-          flex: 1,
-          minWidth: '350px',
-          maxWidth: '480px',
-          height: '400px',
-          textAlign: 'center', 
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '40px',
-          border: '2px solid var(--neon-lime)',
-          background: 'linear-gradient(145deg, rgba(204, 255, 0, 0.05), rgba(0, 0, 0, 0.4))',
-          boxShadow: '0 0 30px rgba(204, 255, 0, 0.15)',
-          transition: 'transform 0.3s ease'
-        }} 
+      <div
+        className="card menu-picker-card menu-picker-card--lime"
         onClick={() => { playSound('click'); onNavigate('menu-infused'); }}
       >
-        <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🍿</div>
-        <h3 className="neon-text-lime" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Infused Popcorn</h3>
-        <div style={{ height: '2px', width: '60px', background: 'var(--neon-lime)', marginBottom: '20px' }}></div>
-        <p style={{ margin: '0 0 30px 0', opacity: 0.8, fontSize: '1.1rem', lineHeight: '1.5' }}>
-          Explore our signature flavors, seasoning kits, and VIP experiences.
-        </p>
-        <button className="btn btn-lime" style={{ width: '100%', margin: 0 }}>View Flavors</button>
+        <div className="menu-picker-card__body">
+          <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🍿</div>
+          <h3 className="neon-text-lime" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Infused Popcorn</h3>
+          <div style={{ height: '2px', width: '60px', background: 'var(--neon-lime)', marginBottom: '20px' }}></div>
+          <p style={{ margin: '0 0 16px 0', opacity: 0.8, fontSize: '1.1rem', lineHeight: '1.5' }}>
+            Explore our signature flavors, seasoning kits, and VIP experiences.
+          </p>
+          <span className="menu-raffle-inline">🎟️ +1 raffle entry per item</span>
+        </div>
+        <button type="button" className="btn btn-lime menu-picker-card__action">View Flavors</button>
       </div>
 
-      {/* --- Products & Merchandise Card --- */}
-      <div 
-        className="card" 
-        style={{ 
-          flex: 1,
-          minWidth: '350px',
-          maxWidth: '480px',
-          height: '400px',
-          textAlign: 'center', 
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '40px',
-          border: '2px solid var(--electric-violet)',
-          background: 'linear-gradient(145deg, rgba(139, 0, 255, 0.05), rgba(0, 0, 0, 0.4))',
-          boxShadow: '0 0 30px rgba(139, 0, 255, 0.15)',
-          transition: 'transform 0.3s ease'
-        }} 
+      <div
+        className="card menu-picker-card menu-picker-card--violet"
         onClick={() => { playSound('click'); onNavigate('menu-products'); }}
       >
-        <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🛍️</div>
-        <h3 className="neon-text-violet" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Merchandise</h3>
-        <div style={{ height: '2px', width: '60px', background: 'var(--electric-violet)', marginBottom: '20px' }}></div>
-        <p style={{ margin: '0 0 30px 0', opacity: 0.8, fontSize: '1.1rem', lineHeight: '1.5' }}>
-          Premium flower selections, signature apparel, and wellness products.
-        </p>
-        <button className="btn btn-violet" style={{ width: '100%', margin: 0 }}>View Shop</button>
+        <div className="menu-picker-card__body">
+          <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🛍️</div>
+          <h3 className="neon-text-violet" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Merchandise</h3>
+          <div style={{ height: '2px', width: '60px', background: 'var(--electric-violet)', marginBottom: '20px' }}></div>
+          <p style={{ margin: '0 0 16px 0', opacity: 0.8, fontSize: '1.1rem', lineHeight: '1.5' }}>
+            Premium flower selections, signature apparel, and wellness products.
+          </p>
+          <span className="menu-raffle-inline">🎟️ +1 raffle entry per item</span>
+        </div>
+        <button type="button" className="btn btn-violet menu-picker-card__action">View Shop</button>
       </div>
     </div>
 
@@ -609,18 +914,18 @@ const InfusedMenu = ({ onBack }) => {
       title: "Popcorn & Drinks",
       accent: "var(--neon-lime)",
       items: [
-        { name: "1 Bag + 1 Water + Raffle Ticket", price: "$5" },
-        { name: "2 Bags + 1 Water + Raffle Ticket", price: "$8" },
-        { name: "1 Water + Raffle Ticket", price: "$3.50" }
+        { name: "1 Bag + 1 Water", price: "$5" },
+        { name: "2 Bags + 1 Water", price: "$8" },
+        { name: "1 Water", price: "$3.50" }
       ]
     },
     {
       title: "Seasoning Kits",
       accent: "var(--electric-violet)",
       items: [
-        { name: "Sweet Kit: 3 Pack + Raffle Ticket", price: "$25", pairing: "Pairs well with Kush" },
-        { name: "Savory Kit: 3 Pack + Raffle Ticket", price: "$25", pairing: "Try with Lemon Ginger Sugar" },
-        { name: "Individual Seasoning + Raffle Ticket", price: "$10" }
+        { name: "Sweet Kit: 3 Pack", price: "$25", pairing: "Pairs well with Kush" },
+        { name: "Savory Kit: 3 Pack", price: "$25", pairing: "Try with Lemon Ginger Sugar" },
+        { name: "Individual Seasoning", price: "$10" }
       ]
     },
     {
@@ -633,9 +938,25 @@ const InfusedMenu = ({ onBack }) => {
     }
   ];
 
+  const renderMenuItem = (item) => (
+    <div className={`menu-item-row${item.featured ? ' menu-item-row--featured' : ''}`}>
+      <div className="menu-item-row__main">
+        <p className={`menu-item-row__name${item.featured ? ' menu-item-row__name--featured' : ''}`}>
+          {item.name}
+        </p>
+        <MenuItemRaffleBadge />
+      </div>
+      <strong className={`menu-item-row__price${item.featured ? ' menu-item-row__price--featured' : ''}`}>
+        {item.price}
+      </strong>
+      {item.pairing ? <div className="pairing-note" style={{ width: '100%' }}>{item.pairing}</div> : null}
+    </div>
+  );
+
   return (
     <div className="view-container" style={{ padding: '40px 20px', textAlign: 'center', overflowY: 'auto' }} onScroll={handleScroll} ref={scrollRef}>
       <h2 className="neon-text-lime" style={{ marginBottom: '10px', fontSize: '2.5rem' }}>Popcorn Infused Menu</h2>
+      <MenuRaffleBanner accent="var(--neon-lime)" />
       <p style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '30px', color: 'var(--text-primary)', background: 'rgba(255, 0, 127, 0.1)', display: 'inline-block', padding: '5px 20px', borderRadius: '50px', border: '1px solid var(--cyber-pink)' }}>
         ⚠️ This menu includes Infused (Low/High Dose) and Non-Infused options.
       </p>
@@ -670,30 +991,8 @@ const InfusedMenu = ({ onBack }) => {
             }}>{cat.title}</h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {cat.items.map((item, i) => (
-                <div key={i} style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  padding: '8px 15px',
-                  borderRadius: '10px',
-                  background: item.featured ? 'rgba(255, 0, 127, 0.1)' : 'transparent',
-                  border: item.featured ? '1px solid var(--cyber-pink)' : '1px solid transparent',
-                  transform: item.featured ? 'scale(1.02)' : 'none'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <div style={{ textAlign: 'left' }}>
-                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: item.featured ? 'bold' : 'normal' }}>
-                        {item.name}
-                      </p>
-                    </div>
-                    <strong style={{ 
-                      color: item.featured ? 'var(--cyber-pink)' : 'var(--text-primary)', 
-                      fontSize: '1.2rem',
-                      textShadow: item.featured ? '0 0 10px var(--cyber-pink)' : 'none'
-                    }}>{item.price}</strong>
-                  </div>
-                  {item.pairing && <div className="pairing-note">{item.pairing}</div>}
-                </div>
+              {cat.items.map((item) => (
+                <div key={item.name}>{renderMenuItem(item)}</div>
               ))}
             </div>
           </div>
@@ -763,9 +1062,30 @@ const ProductMenu = ({ onBack }) => {
     }
   ];
 
+  const renderProductItem = (item) => (
+    <div className={`menu-item-row${item.featured ? ' menu-item-row--featured' : ''}`}>
+      <div className="menu-item-row__main">
+        <p className={`menu-item-row__name${item.featured ? ' menu-item-row__name--featured' : ''}`}>
+          {item.name}
+          {item.status ? (
+            <span className={`badge ${item.status === 'LIMITED' ? 'badge-scarcity' : 'badge-staff'}`}>{item.status}</span>
+          ) : null}
+          {item.featured ? (
+            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--cyber-pink)' }}>BEST SELLER</span>
+          ) : null}
+        </p>
+        <MenuItemRaffleBadge />
+      </div>
+      <strong className={`menu-item-row__price${item.featured ? ' menu-item-row__price--featured' : ''}`}>
+        {item.price}
+      </strong>
+    </div>
+  );
+
   return (
     <div className="view-container" style={{ padding: '40px 20px', textAlign: 'center', overflowY: 'auto' }} onScroll={handleScroll}>
-      <h2 className="neon-text-violet" style={{ marginBottom: '30px', fontSize: '2.5rem' }}>Products & Merchandise</h2>
+      <h2 className="neon-text-violet" style={{ marginBottom: '16px', fontSize: '2.5rem' }}>Products & Merchandise</h2>
+      <MenuRaffleBanner accent="var(--electric-violet)" />
       
       {showScrollHint && (
         <div style={{ position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, animation: 'bounce 2s infinite', color: 'var(--electric-violet)', fontWeight: 'bold' }}>
@@ -797,30 +1117,8 @@ const ProductMenu = ({ onBack }) => {
             }}>{cat.title}</h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {cat.items.map((item, i) => (
-                <div key={i} style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center',
-                  padding: '8px 15px',
-                  borderRadius: '10px',
-                  background: item.featured ? 'rgba(255, 0, 127, 0.1)' : 'transparent',
-                  border: item.featured ? '1px solid var(--cyber-pink)' : '1px solid transparent',
-                  transform: item.featured ? 'scale(1.02)' : 'none'
-                }}>
-                  <div style={{ textAlign: 'left' }}>
-                    <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: item.featured ? 'bold' : 'normal' }}>
-                      {item.name}
-                      {item.status && <span className={`badge ${item.status === 'LIMITED' ? 'badge-scarcity' : 'badge-staff'}`}>{item.status}</span>}
-                      {item.featured && <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--cyber-pink)' }}>BEST SELLER</span>}
-                    </p>
-                  </div>
-                  <strong style={{ 
-                    color: item.featured ? 'var(--cyber-pink)' : 'var(--text-primary)', 
-                    fontSize: '1.2rem',
-                    textShadow: item.featured ? '0 0 10px var(--cyber-pink)' : 'none'
-                  }}>{item.price}</strong>
-                </div>
+              {cat.items.map((item) => (
+                <div key={item.name}>{renderProductItem(item)}</div>
               ))}
             </div>
           </div>
@@ -832,7 +1130,43 @@ const ProductMenu = ({ onBack }) => {
   );
 };
 
-const MobileSignupPanel = ({ staffName = 'Staff', onApproved, onDeclined, onError, showQr = true, title = 'Skip the Line' }) => {
+function ResponsiveSignupQr({ value, minSize = 300, maxSize = 480 }) {
+  const wrapRef = useRef(null);
+  const [size, setSize] = useState(minSize);
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const width = el.clientWidth;
+      if (width <= 0) return;
+      setSize(Math.round(Math.min(maxSize, Math.max(minSize, width))));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [minSize, maxSize]);
+
+  return (
+    <div ref={wrapRef} className="mobile-signup-qr-wrap mobile-signup-qr-wrap--hero">
+      <QRCodeCanvas value={value} size={size} level="M" includeMargin />
+    </div>
+  );
+}
+
+const MobileSignupPanel = ({
+  staffName = 'Staff',
+  onApproved,
+  onDeclined,
+  onError,
+  showQr = true,
+  showPending = true,
+  showStaffTools = true,
+  largeQr = false,
+  title = 'Skip the Line',
+  stream = 'booth',
+}) => {
   const [signupUrl, setSignupUrl] = useState('');
   const [staffUrl, setStaffUrl] = useState('');
   const [signupStatus, setSignupStatus] = useState(null);
@@ -843,11 +1177,17 @@ const MobileSignupPanel = ({ staffName = 'Staff', onApproved, onDeclined, onErro
 
   const refresh = useCallback(async () => {
     try {
+      const signupUrlFn = stream === 'colombia_retreat' ? api.getColombiaRetreatSignupUrl : api.getMobileSignupUrl;
+      const pendingStream = stream === 'colombia_retreat' ? 'colombia_retreat' : 'booth';
       const [url, status, list, staff] = await Promise.all([
-        api.getMobileSignupUrl(),
+        signupUrlFn(),
         api.getMobileSignupStatus(),
-        api.getPendingMobileSignups(),
-        api.getCloudStaffUrl(),
+        showPending ? api.getPendingMobileSignups(pendingStream) : Promise.resolve([]),
+        showStaffTools
+          ? (stream === 'colombia_retreat'
+            ? api.getMobileSignupStatus().then((s) => s?.publicColombiaStaffUrl || null)
+            : api.getCloudStaffUrl())
+          : Promise.resolve(null),
       ]);
       setSignupUrl(url || '');
       setStaffUrl(staff || '');
@@ -856,7 +1196,7 @@ const MobileSignupPanel = ({ staffName = 'Staff', onApproved, onDeclined, onErro
     } catch (err) {
       console.error('Mobile signup panel refresh failed:', err);
     }
-  }, []);
+  }, [stream, showPending, showStaffTools]);
 
   useEffect(() => {
     refresh();
@@ -948,7 +1288,7 @@ const MobileSignupPanel = ({ staffName = 'Staff', onApproved, onDeclined, onErro
         )}
       </h3>
 
-      {staffUrl && (
+      {showStaffTools && staffUrl && (
         <div style={{ marginBottom: '16px' }}>
           <button
             type="button"
@@ -974,18 +1314,33 @@ const MobileSignupPanel = ({ staffName = 'Staff', onApproved, onDeclined, onErro
       )}
 
       {showQr && signupUrl && (
-        <div style={{
-          background: 'white',
-          padding: '16px',
-          borderRadius: '16px',
-          display: 'inline-block',
-          marginBottom: '12px',
-          boxShadow: '0 0 30px rgba(204,255,0,0.25)',
-        }}>
-          <QRCodeCanvas value={signupUrl} size={180} level="M" includeMargin />
-        </div>
+        largeQr ? (
+          <>
+            <ResponsiveSignupQr value={signupUrl} />
+            <p className="mobile-signup-qr-caption">
+              Scan with your phone camera to sign up from the line
+            </p>
+          </>
+        ) : (
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '16px',
+            display: 'inline-block',
+            marginBottom: '12px',
+            boxShadow: '0 0 30px rgba(204,255,0,0.25)',
+          }}>
+            <QRCodeCanvas value={signupUrl} size={180} level="M" includeMargin />
+            {stream === 'colombia_retreat' ? (
+              <p style={{ color: '#111', fontSize: '0.75rem', margin: '10px 0 0', maxWidth: '180px' }}>
+                Scan to join the Colombia retreat waitlist from your phone
+              </p>
+            ) : null}
+          </div>
+        )
       )}
 
+      {showPending ? (
       <div style={{ textAlign: 'left', borderTop: '1px solid var(--glass-border)', paddingTop: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <h4 className="neon-text-lime" style={{ margin: 0, fontSize: '0.95rem' }}>Pending Phone Signups</h4>
@@ -1092,11 +1447,12 @@ const MobileSignupPanel = ({ staffName = 'Staff', onApproved, onDeclined, onErro
           </div>
         )}
       </div>
+      ) : null}
     </div>
   );
 };
 
-const CheckIn = ({ onBack, onSuccess, onFocusInput }) => {
+const CheckIn = ({ onBack, onSuccess, onFocusInput, vipRegistration = false }) => {
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [ticketNumbers, setTicketNumbers] = useState(['']);
   const [error, setError] = useState('');
@@ -1134,9 +1490,11 @@ const CheckIn = ({ onBack, onSuccess, onFocusInput }) => {
     }
 
     try {
-      const result = await api.checkInOrRegister({ ...formData, ticketNumbers: ticketNumbers.filter(t => t.trim().length === 6) });
-      playSound('confirm');
-      onSuccess(result.contactId, result.isNew, result.contact.name);
+      const result = vipRegistration
+        ? await api.checkInOrRegisterVip({ ...formData, ticketNumbers: ticketNumbers.filter(t => t.trim().length === 6) })
+        : await api.checkInOrRegister({ ...formData, ticketNumbers: ticketNumbers.filter(t => t.trim().length === 6) });
+      playSound(vipRegistration ? 'vip' : 'confirm');
+      onSuccess(result.contactId, result.isNew, result.contact?.name || formData.firstName, result);
     } catch (err) { 
       playSound('error'); 
       setError(err.message || 'Error'); 
@@ -1146,11 +1504,18 @@ const CheckIn = ({ onBack, onSuccess, onFocusInput }) => {
   return (
     <div className="view-container" style={{ padding: '40px 30px', overflowY: 'auto' }}>
       <button className="btn" onClick={() => { playSound('click'); onBack(); }} style={{ background: 'transparent' }}>← Back</button>
-      <h2 className="neon-text-lime" style={{ marginBottom: '30px', textAlign: 'center' }}>Check-In / Register</h2>
+      <h2 className="neon-text-lime" style={{ marginBottom: '30px', textAlign: 'center' }}>
+        {vipRegistration ? 'VIP Registration' : 'Check-In / Register'}
+      </h2>
+      {vipRegistration && (
+        <p style={{ textAlign: 'center', opacity: 0.75, margin: '-16px 0 24px', fontSize: '0.95rem' }}>
+          Completing signup automatically grants VIP status, booth visit points, and +2 raffle entries.
+        </p>
+      )}
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))',
         gap: '28px',
         maxWidth: '1200px',
         margin: '0 auto',
@@ -1236,6 +1601,9 @@ const CheckIn = ({ onBack, onSuccess, onFocusInput }) => {
 
         <MobileSignupPanel
           staffName="Kiosk"
+          largeQr
+          showPending={false}
+          showStaffTools={false}
           onApproved={(signup) => onSuccess(signup.contact_id, signup.is_new, signup.name)}
           onError={(msg) => setError(msg)}
         />
@@ -1306,19 +1674,21 @@ const Profile = ({ contactId, onNavigate }) => {
 
   if (!contact) return <div className="view-container">Loading...</div>;
   
-  const hasRetreat = actions.includes('Retreat Interest');
+  const hasRetreat = api.isColombiaRetreatInterested(contact) || actions.includes('Retreat Interest');
 
   return (
     <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
       <div style={{ maxWidth: '800px', margin: '0 auto' }}>
         <div className="card" style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h2 className="neon-text-lime" style={{ fontSize: '2.5rem' }}>{contact.name}</h2>
-          <p style={{ opacity: 0.7 }}>
-            Reference:{' '}
-            <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--neon-lime)' }}>
-              {api.contactReference(contact) || '—'}
-            </span>
-          </p>
+            <p style={{ opacity: 0.7 }}>
+              Reference: <GuestReferenceDisplay contact={contact} monospace />
+            </p>
+            {api.isPrehistoricGuestReference(contact) && api.legacyGuestReference(contact) ? (
+              <p style={{ opacity: 0.5, fontSize: '0.8rem', marginTop: '-8px' }}>
+                Prehistoric ID preserved: {api.legacyGuestReference(contact)}
+              </p>
+            ) : null}
           
           <div style={{ display: 'flex', gap: '20px', margin: '30px 0' }}>
               <div className="card" style={{ flex: 1, background: 'rgba(139, 0, 255, 0.05)', border: '1px solid var(--electric-violet)' }}>
@@ -1341,7 +1711,15 @@ const Profile = ({ contactId, onNavigate }) => {
               <button 
                 className="btn btn-lime" 
                 style={{ width: '100%', margin: '0 0 10px 0', height: '70px', fontSize: '1rem' }} 
-                onClick={() => handleQuickAction('Retreat Interest')}
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    await api.markColombiaRetreatInterest(contactId, 'profile_waitlist', 'System');
+                    await load();
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
                 disabled={loading}
               >
                 {loading ? 'Processing...' : '🇨🇴 Join Retreat Waitlist'}
@@ -1422,20 +1800,388 @@ const GiveawayPackage = () => (
     </div>
     
     <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-      <p className="neon-text-pink" style={{ fontWeight: 'bold', letterSpacing: '2px' }}>SCROLL DOWN TO ENTER & TRACK ENTRIES</p>
+      <p className="neon-text-pink" style={{ fontWeight: 'bold', letterSpacing: '2px', margin: 0 }}>GRAND PRIZE RAFFLE — ENTRIES FROM TASKS ABOVE</p>
+    </div>
+  </div>
+);
+
+const GuestAccountGateModal = ({
+  isOpen,
+  actionName,
+  search,
+  searchResults,
+  onSearch,
+  onSelectContact,
+  onRegister,
+  onFocusInput,
+  onClose,
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-overlay" style={{ zIndex: 11000 }}>
+      <div className="card" style={{ width: '480px', maxWidth: '92vw', textAlign: 'left' }}>
+        <h3 className="neon-text-lime" style={{ margin: '0 0 8px' }}>Link guest for points</h3>
+        <p style={{ margin: '0 0 6px', opacity: 0.85 }}>
+          Staff verification for: <strong>{actionName}</strong>
+        </p>
+        <p style={{ margin: '0 0 20px', opacity: 0.65, fontSize: '0.9rem', lineHeight: 1.5 }}>
+          Search an existing guest or register a new one — then staff approves the task.
+        </p>
+        <div className="input-group">
+          <input
+            type="text"
+            placeholder="Name, email, phone, or guest ID…"
+            value={search}
+            readOnly
+            onClick={(e) => onFocusInput('default', search, onSearch, null, null, e.currentTarget)}
+          />
+        </div>
+        {searchResults.length > 0 && (
+          <ContactSearchResults
+            results={searchResults}
+            onSelect={(c) => onSelectContact(c.contact_id)}
+            hint="Tap a guest from attendee records"
+          />
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <button type="button" className="btn btn-violet" onClick={onRegister} style={{ width: '100%', margin: 0 }}>
+            New guest? Register & continue
+          </button>
+          <button type="button" className="btn" onClick={onClose} style={{ width: '100%', margin: 0, background: 'transparent' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const VipExperienceSection = ({ perks = VIP_EXPERIENCE_PERKS, accent = 'var(--neon-lime)' }) => (
+  <div
+    className="card"
+    style={{
+      marginBottom: '28px',
+      padding: '28px 24px',
+      border: '1px solid rgba(255, 165, 0, 0.4)',
+      background: 'linear-gradient(160deg, rgba(255,165,0,0.07) 0%, rgba(0,0,0,0.45) 100%)',
+      textAlign: 'center',
+    }}
+  >
+    <div style={{ marginBottom: '20px' }}>
+      <span
+        style={{
+          display: 'inline-block',
+          padding: '4px 18px',
+          borderRadius: '999px',
+          fontSize: '0.75rem',
+          fontWeight: '800',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          background: 'rgba(255,165,0,0.15)',
+          border: '1px solid rgba(255,165,0,0.45)',
+          color: 'rgba(255,165,0,0.95)',
+          marginBottom: '12px',
+        }}
+      >
+        👑 VIP Experience
+      </span>
+      <h2
+        style={{
+          margin: 0,
+          fontSize: '1.6rem',
+          fontWeight: '900',
+          color: accent,
+          letterSpacing: '0.03em',
+        }}
+      >
+        Your VIP Perks
+      </h2>
+    </div>
+
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '12px',
+        textAlign: 'left',
+      }}
+    >
+      {perks.map((perk) => (
+        <div
+          key={perk}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '12px 14px',
+            borderRadius: '10px',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            fontSize: '0.88rem',
+            lineHeight: 1.4,
+          }}
+        >
+          <span style={{ fontSize: '1.1rem', flexShrink: 0, opacity: 0.85 }}>★</span>
+          <span>{perk}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const VipPerksCard = () => (
+  <div className="vip-perks-strip">
+    <div className="vip-perks-strip__header">
+      <span className="vip-perks-strip__badge">👑 VIP · {VIP_POINTS_THRESHOLD} pts</span>
+      <span className="vip-perks-strip__note">Unlock rewards below</span>
+    </div>
+    <div className="vip-perks-strip__grid">
+      {VIP_EXPERIENCE_PERKS.map((perk) => (
+        <span key={perk} className="vip-perks-strip__perk">{perk}</span>
+      ))}
+    </div>
+  </div>
+);
+
+/** Staff Portal — mirrors Giveaway Hub rewards for on-floor reference */
+const StaffGiveawayHubReference = () => (
+  <div
+    className="card"
+    style={{
+      marginTop: '24px',
+      padding: '22px 24px',
+      border: '1px solid rgba(139, 0, 255, 0.35)',
+      background: 'linear-gradient(180deg, rgba(139, 0, 255, 0.08) 0%, rgba(0, 0, 0, 0.35) 100%)',
+    }}
+  >
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+      <h3 className="neon-text-violet" style={{ margin: 0, fontSize: '1.15rem' }}>Giveaway Hub — Staff Reference</h3>
+      <span style={{ fontSize: '0.72rem', opacity: 0.55, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Guest-facing · do not edit on show PC</span>
+    </div>
+    <p style={{ margin: '0 0 18px', fontSize: '0.88rem', opacity: 0.72, lineHeight: 1.55 }}>
+      Same rewards and point values guests see on <strong>Giveaway Hub</strong>. Verify earn-point tasks only after the guest completes the action and their account is linked (email, phone, or guest ID).
+    </p>
+
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+      <div>
+        <h4 className="neon-text-pink" style={{ margin: '0 0 10px', fontSize: '0.95rem' }}>👑 VIP perks ({VIP_POINTS_THRESHOLD} pts or $20 upgrade)</h4>
+        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', lineHeight: 1.55, opacity: 0.9 }}>
+          {VIP_EXPERIENCE_PERKS.map((perk) => (
+            <li key={perk} style={{ marginBottom: '6px' }}>{perk}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div>
+        <h4 className="neon-text-lime" style={{ margin: '0 0 10px', fontSize: '0.95rem' }}>Earn points → VIP (Giveaway Hub tasks)</h4>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <thead>
+            <tr style={{ textAlign: 'left', opacity: 0.6, borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+              <th style={{ padding: '6px 8px 6px 0' }}>Task</th>
+              <th style={{ padding: '6px 8px' }}>Pts</th>
+              <th style={{ padding: '6px 0 6px 8px' }}>Entry</th>
+            </tr>
+          </thead>
+          <tbody>
+            {EARN_POINTS_TASKS.map((task) => (
+              <tr key={task.actionName} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <td style={{ padding: '8px 8px 8px 0' }}>{task.title}</td>
+                <td style={{ padding: '8px', color: 'var(--electric-violet)', fontWeight: 'bold' }}>+{task.points}</td>
+                <td style={{ padding: '8px 0 8px 8px', opacity: 0.85 }}>{task.raffleEntry ? '+1' : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ margin: '10px 0 0', fontSize: '0.78rem', opacity: 0.55 }}>
+          Staff-verify: Google, YouTube, IG Story · Self-serve: Flavor Vote · Auto: Booth check-in
+        </p>
+      </div>
+
+      <div>
+        <h4 className="neon-text-lime" style={{ margin: '0 0 10px', fontSize: '0.95rem' }}>Grand prize raffle bundle</h4>
+        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', lineHeight: 1.55, opacity: 0.9 }}>
+          {GIVEAWAY_PACKAGE.map((item) => (
+            <li key={item} style={{ marginBottom: '6px' }}>{item}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+
+    <div
+      style={{
+        marginTop: '18px',
+        padding: '14px 16px',
+        borderRadius: '10px',
+        border: '1px solid rgba(204, 255, 0, 0.25)',
+        background: 'rgba(204, 255, 0, 0.05)',
+        fontSize: '0.82rem',
+        lineHeight: 1.55,
+      }}
+    >
+      <strong style={{ color: 'var(--neon-lime)', display: 'block', marginBottom: '6px' }}>Staff rules</strong>
+      <ul style={{ margin: 0, paddingLeft: '18px', opacity: 0.88 }}>
+        <li><strong>VIP Lounge → Register VIP:</strong> auto VIP + booth visit (+10 pts) + 2 raffle entries.</li>
+        <li><strong>Attendee Management → 👑+:</strong> manual VIP grant (+2 entries) or remove VIP.</li>
+        <li><strong>500 pts:</strong> guest redeems VIP Upgrade via 🎁 Redeem (deducts 500 pts).</li>
+        <li><strong>Popcorn refill:</strong> VIP only — 10 min cooldown between refills.</li>
+        <li><strong>1g flower:</strong> VIP claim once per guest — staff PIN on VIP Lounge.</li>
+      </ul>
+    </div>
+  </div>
+);
+
+const AccountLookupCard = ({
+  search,
+  searchResults,
+  onSearch,
+  onSelectContact,
+  onRegister,
+  onFocusInput,
+  onNavigateHome,
+  title = 'Find Your Account',
+  description = 'Enter email, phone, guest ID (e.g. CND-00007), or name to link this activity to your account.',
+  registerLabel = 'New Registration',
+  showBackHome = true,
+}) => (
+  <div className="card" style={{ marginBottom: '32px', border: '1px solid var(--neon-lime)', background: 'rgba(204, 255, 0, 0.04)' }}>
+    <h3 className="neon-text-lime" style={{ margin: '0 0 8px', fontSize: '1.15rem' }}>{title}</h3>
+    <p style={{ margin: '0 0 20px', opacity: 0.75, fontSize: '0.9rem', lineHeight: 1.5 }}>
+      {description}
+    </p>
+    <div className="input-group">
+      <input
+        type="text"
+        placeholder="Email, phone, or guest ID…"
+        value={search}
+        readOnly
+        onClick={(e) => onFocusInput('default', search, onSearch, null, null, e.currentTarget)}
+      />
+    </div>
+    {searchResults.length > 0 && (
+      <ContactSearchResults
+        results={searchResults}
+        onSelect={(c) => onSelectContact(c.contact_id)}
+      />
+    )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <button type="button" className="btn btn-violet" onClick={onRegister} style={{ width: '100%', margin: 0 }}>{registerLabel}</button>
+      {showBackHome ? (
+        <button type="button" className="btn" onClick={onNavigateHome} style={{ width: '100%', margin: 0, background: 'transparent' }}>Back to Home</button>
+      ) : null}
+    </div>
+  </div>
+);
+
+const PointsProgressBar = ({ points }) => {
+  const pct = Math.min(100, Math.round((points / VIP_POINTS_THRESHOLD) * 100));
+  const vipReady = points >= VIP_POINTS_THRESHOLD;
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '8px', opacity: 0.85 }}>
+        <span>{points} pts</span>
+        <span style={{ color: vipReady ? 'var(--neon-lime)' : 'inherit' }}>
+          {vipReady ? '👑 VIP unlock ready — see staff' : `${VIP_POINTS_THRESHOLD - points} pts to VIP`}
+        </span>
+      </div>
+      <div style={{ height: '8px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: vipReady ? 'var(--neon-lime)' : 'var(--electric-violet)', transition: 'width 0.4s ease' }} />
+      </div>
+    </div>
+  );
+};
+
+const EarnPointsTaskCard = ({ task, isDone, onVerify, onNavigateTask }) => {
+  const handleAction = () => {
+    playSound('click');
+    if (task.verifyType === 'staff') onVerify(task.actionName);
+    else if (task.verifyType === 'navigate') onNavigateTask(task.navigateTo);
+  };
+
+  return (
+    <div
+      className="card"
+      style={{
+        border: isDone ? '2px solid var(--neon-lime)' : '1px solid var(--glass-border)',
+        opacity: isDone ? 0.72 : 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        padding: '20px',
+        background: isDone ? 'rgba(204,255,0,0.04)' : 'rgba(255,255,255,0.02)',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+        <h3 style={{ margin: 0, fontSize: '1.05rem', lineHeight: 1.3 }}>{task.title}</h3>
+        {isDone && <span style={{ color: 'var(--neon-lime)', fontWeight: 'bold', fontSize: '0.85rem' }}>✓ Done</span>}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '999px', background: 'rgba(139,0,255,0.2)', color: 'var(--electric-violet)', fontWeight: 'bold' }}>
+          +{task.points} pts
+        </span>
+        {task.raffleEntry && (
+          <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '999px', background: 'rgba(204,255,0,0.12)', color: 'var(--neon-lime)', fontWeight: 'bold' }}>
+            +1 raffle entry
+          </span>
+        )}
+      </div>
+      <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.6, lineHeight: 1.45 }}>
+        {task.verifyType === 'staff' && 'Complete the task on your phone → search or register guest → staff verifies'}
+        {task.verifyType === 'navigate' && 'Self-serve on this kiosk'}
+        {task.verifyType === 'auto' && 'Awarded when you check in / register'}
+      </p>
+      {task.qrUrl && !isDone && (
+        <div style={{ background: 'white', padding: '12px', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', alignSelf: 'center' }}>
+          <QRCodeCanvas value={task.qrUrl} size={96} />
+          <p style={{ color: '#111', fontSize: '0.65rem', fontWeight: 'bold', margin: '8px 0 0', textTransform: 'uppercase' }}>{task.qrCaption}</p>
+        </div>
+      )}
+      {isDone ? (
+        <p className="neon-text-lime" style={{ margin: 0, fontWeight: 'bold', fontSize: '0.9rem', textAlign: 'center' }}>Points tracked</p>
+      ) : task.verifyType === 'auto' ? (
+        <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.55, textAlign: 'center' }}>{task.verifyLabel}</p>
+      ) : (
+        <button type="button" className="btn btn-lime" style={{ width: '100%', margin: 0 }} onClick={handleAction}>
+          {task.verifyType === 'staff' ? task.verifyLabel : task.verifyLabel}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const EarnPointsSection = ({ completedActions, onVerify, onNavigate }) => (
+  <div style={{ marginBottom: '40px' }}>
+    <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+      <span className="badge badge-scarcity" style={{ fontSize: '0.85rem', padding: '4px 16px', borderRadius: '50px', marginBottom: '10px', display: 'inline-block' }}>
+        EARN POINTS → VIP
+      </span>
+      <h2 className="neon-text-lime" style={{ fontSize: '1.75rem', margin: '8px 0 6px' }}>Complete Tasks</h2>
+      <p style={{ opacity: 0.65, fontSize: '0.95rem', margin: 0 }}>
+        Each verified task adds points · {VIP_POINTS_THRESHOLD} pts unlocks VIP
+      </p>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+      {EARN_POINTS_TASKS.map((task) => (
+        <EarnPointsTaskCard
+          key={task.actionName}
+          task={task}
+          isDone={completedActions.includes(task.actionName)}
+          onVerify={onVerify}
+          onNavigateTask={onNavigate}
+        />
+      ))}
     </div>
   </div>
 );
 
 const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInput, staffNames }) => {
-  const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const { search, searchResults, handleSearch, clearSearch } = useContactSearch();
   const [activeContact, setActiveContact] = useState(null);
   const [entries, setEntries] = useState(0);
   const [completedActions, setCompletedActions] = useState([]);
   const [approvalTarget, setApprovalTarget] = useState(null);
+  const [accountGateOpen, setAccountGateOpen] = useState(false);
+  const [pendingVerifyAction, setPendingVerifyAction] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
-  const searchTimeout = useRef(null);
 
   const loadStatus = async (id) => {
     const c = await api.getContactById(id);
@@ -1449,19 +2195,6 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
 
   useEffect(() => { if (contactId) loadStatus(contactId); }, [contactId]);
 
-  const handleSearch = useCallback(async (val) => {
-    setSearch(val);
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    
-    if (val.length > 2) {
-      searchTimeout.current = setTimeout(async () => {
-        setSearchResults(await api.searchContacts(val));
-      }, 300); // 300ms Debounce
-    } else {
-      setSearchResults([]);
-    }
-  }, []);
-
   const handleApproveAction = async (staffName) => {
     try {
       await api.verifyAndAwardAction(activeContact.contact_id, approvalTarget, staffName);
@@ -1472,134 +2205,159 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
     } catch (err) { setNotify({ message: err.message, type: 'error' }); }
   };
 
-  if (isRegistering) return <CheckIn onBack={() => setIsRegistering(false)} onSuccess={(id) => { setIsRegistering(false); loadStatus(id); }} onFocusInput={onFocusInput} />;
+  const openStaffApprovalAfterLink = (actionName) => {
+    setApprovalTarget(actionName);
+    setPendingVerifyAction(null);
+    setAccountGateOpen(false);
+    clearSearch();
+  };
 
-  if (!activeContact) {
+  const handleGateSelectContact = async (id) => {
+    playSound('click');
+    await loadStatus(id);
+    if (pendingVerifyAction) openStaffApprovalAfterLink(pendingVerifyAction);
+  };
+
+  const handleVerifyTask = (actionName) => {
+    if (activeContact) {
+      setApprovalTarget(actionName);
+    } else {
+      setPendingVerifyAction(actionName);
+      setAccountGateOpen(true);
+    }
+  };
+
+  const handleNavigateTask = (view) => {
+    onNavigate(view);
+  };
+
+  const handleCloseAccountGate = () => {
+    playSound('click');
+    setAccountGateOpen(false);
+    setPendingVerifyAction(null);
+    clearSearch();
+  };
+
+  const handleRegisterFromGate = () => {
+    playSound('click');
+    setAccountGateOpen(false);
+    setIsRegistering(true);
+  };
+
+  const handleRegisterSuccess = async (id) => {
+    setIsRegistering(false);
+    await loadStatus(id);
+    if (pendingVerifyAction) openStaffApprovalAfterLink(pendingVerifyAction);
+  };
+
+  if (isRegistering) {
     return (
-      <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
-        <h2 className="neon-text-violet" style={{ textAlign: 'center', marginBottom: '30px' }}>Raffle Hub</h2>
-        
-        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-          <GiveawayPackage />
-          
-          <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
-            <p style={{ marginBottom: '25px', opacity: 0.8, textAlign: 'center' }}>Search account to check giveaway status.</p>
-            <div className="input-group">
-              <input 
-                type="text" 
-                placeholder="Search..." 
-                value={search} 
-                readOnly
-                onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
-                autoFocus 
-              />
-            </div>
-            {searchResults.map(c => (
-              <div key={c.contact_id} onClick={() => { playSound('click'); loadStatus(c.contact_id); setSearch(''); setSearchResults([]); }} style={{ padding: '15px', borderBottom: '1px solid var(--glass-border)', cursor: 'pointer' }}>
-                <strong>{c.name}</strong> ({c.email})
-              </div>
-            ))}
-            <button className="btn btn-violet" onClick={() => { playSound('click'); setIsRegistering(true); }} style={{ width: '100%', marginTop: '20px' }}>New Registration</button>
-            <button className="btn" onClick={() => { playSound('click'); onNavigate('home'); }} style={{ width: '100%', background: 'transparent' }}>Cancel</button>
-          </div>
-        </div>
-      </div>
+      <CheckIn
+        onBack={() => { setIsRegistering(false); if (pendingVerifyAction) setAccountGateOpen(true); }}
+        onSuccess={handleRegisterSuccess}
+        onFocusInput={onFocusInput}
+      />
     );
   }
 
+  const completedActionsSafe = activeContact ? completedActions : [];
+
   return (
-    <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
-      <StaffApprovalModal isOpen={!!approvalTarget} actionName={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={handleApproveAction} onFocusInput={onFocusInput} setNotify={setNotify} staffNames={staffNames} />
-      
+    <div className="view-container" style={{ padding: '40px 24px', overflowY: 'auto' }}>
+      <StaffApprovalModal
+        isOpen={!!approvalTarget}
+        actionName={approvalTarget}
+        onClose={() => setApprovalTarget(null)}
+        onApprove={handleApproveAction}
+        onFocusInput={onFocusInput}
+        setNotify={setNotify}
+        staffNames={staffNames}
+      />
+      <GuestAccountGateModal
+        isOpen={accountGateOpen}
+        actionName={pendingVerifyAction}
+        search={search}
+        searchResults={searchResults}
+        onSearch={handleSearch}
+        onSelectContact={handleGateSelectContact}
+        onRegister={handleRegisterFromGate}
+        onFocusInput={onFocusInput}
+        onClose={handleCloseAccountGate}
+      />
+
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-          <h2 className="neon-text-violet">{activeContact.name}: {entries} Entries</h2>
-          {!contactId && (
-            <button className="btn" onClick={() => { playSound('click'); setActiveContact(null); }} style={{ minWidth: 'auto' }}>Switch Account</button>
-          )}
-        </div>
+        <h2 className="neon-text-violet" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '2rem' }}>Raffle Hub</h2>
+        <p style={{ textAlign: 'center', opacity: 0.65, marginBottom: '28px' }}>
+          Earn points, stack raffle entries, unlock VIP at {VIP_POINTS_THRESHOLD} pts
+        </p>
+
+        {activeContact && (
+          <div className="card" style={{ marginBottom: '28px', padding: '20px 24px', border: '1px solid var(--electric-violet)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.55, textTransform: 'uppercase' }}>Tracking account</p>
+                <h2 className="neon-text-lime" style={{ margin: '4px 0 0', fontSize: '1.5rem' }}>{activeContact.name}</h2>
+                {api.contactReference(activeContact) && (
+                  <p style={{ margin: '4px 0 0', opacity: 0.6, fontSize: '0.85rem' }}>ID: {api.contactReference(activeContact)}</p>
+                )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div className="neon-text-violet" style={{ fontSize: '1.75rem', fontWeight: 'bold', lineHeight: 1 }}>{entries}</div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>raffle entries</div>
+              </div>
+            </div>
+            <PointsProgressBar points={activeContact.total_points || 0} />
+            {!contactId && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => { playSound('click'); setActiveContact(null); setCompletedActions([]); }}
+                style={{ minWidth: 'auto', marginTop: '4px' }}
+              >
+                Switch account
+              </button>
+            )}
+          </div>
+        )}
+
+        <VipExperienceSection />
+
+        <EarnPointsSection
+          completedActions={completedActionsSafe}
+          onVerify={handleVerifyTask}
+          onNavigate={handleNavigateTask}
+        />
 
         <GiveawayPackage />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-          {['Google Review', 'YouTube Subscription', 'Social Media Story Post'].map(task => {
-              const isDone = completedActions.includes(task);
-              return (
-                  <div key={task} className="card" style={{ 
-                    border: isDone ? '2px solid var(--neon-lime)' : '1px solid var(--glass-border)', 
-                    opacity: isDone ? 0.6 : 1,
-                    textAlign: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    minHeight: '320px'
-                  }}>
-                      <h3 style={{ marginBottom: '15px' }}>{task} {isDone && '✅'}</h3>
-                      
-                      {task === 'Google Review' && !isDone && (
-                        <div style={{ marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <QRCodeCanvas value="https://search.google.com/local/writereview?placeid=ChIJRYOSq0vzwogRnYP5n_UBNkQ" size={100} />
-                          <p style={{ color: 'black', fontSize: '0.6rem', marginTop: '5px', fontWeight: 'bold', margin: '5px 0 0 0' }}>SCAN TO REVIEW</p>
-                        </div>
-                      )}
-
-                      {task === 'YouTube Subscription' && !isDone && (
-                        <div style={{ marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <QRCodeCanvas value="https://www.youtube.com/@GUDESSENCE?sub_confirmation=1" size={100} />
-                          <p style={{ color: 'black', fontSize: '0.6rem', marginTop: '5px', fontWeight: 'bold', margin: '5px 0 0 0' }}>SCAN TO SUBSCRIBE</p>
-                        </div>
-                      )}
-
-                      {task === 'Social Media Story Post' && !isDone && (
-                        <div style={{ marginBottom: '20px', background: 'white', padding: '10px', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <QRCodeCanvas value="https://www.instagram.com/gudessence.clearwater/" size={100} />
-                          <p style={{ color: 'black', fontSize: '0.6rem', marginTop: '5px', fontWeight: 'bold', margin: '5px 0 0 0' }}>SCAN TO FOLLOW / TAG</p>
-                        </div>
-                      )}
-
-                      {isDone ? (
-                        <p className="neon-text-lime" style={{ fontWeight: 'bold' }}>Task Completed</p>
-                      ) : (
-                        <button className="btn btn-lime" style={{ width: '100%', margin: 0 }} onClick={() => { playSound('click'); setApprovalTarget(task); }}>Verify with Staff</button>
-                      )}
-                  </div>
-              )
-          })}
+        <div style={{ textAlign: 'center', marginTop: '32px' }}>
+          <button type="button" className="btn btn-lime" onClick={() => { playSound('click'); onNavigate('home'); }}>Done</button>
         </div>
-        <center style={{ marginTop: '50px' }}><button className="btn btn-lime" onClick={() => { playSound('click'); onNavigate('home'); }}>Done</button></center>
       </div>
     </div>
   );
 };
 
 const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames }) => {
-  const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const { search, searchResults, handleSearch, clearSearch } = useContactSearch();
   const [status, setStatus] = useState(null);
   const [approvalTarget, setApprovalTarget] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
-  const searchTimeout = useRef(null);
 
   const loadStatus = async (id) => {
     const contact = await api.getContactById(id);
     if (!contact) return;
-    setStatus({ contactId: contact.contact_id, name: contact.name, isVip: !!contact.is_vip, lastRedeemed: contact.vip_popcorn_last_redeemed_at, flowerClaimed: !!contact.flower_claimed });
+    setStatus({
+      contactId: contact.contact_id,
+      name: contact.name,
+      isVip: !!contact.is_vip,
+      points: contact.total_points || 0,
+      lastRedeemed: contact.vip_popcorn_last_redeemed_at,
+      flowerClaimed: !!contact.flower_claimed,
+    });
     onSuccess(id);
     playSound('confirm');
   };
-
-  const handleSearch = useCallback(async (val) => {
-    setSearch(val);
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (val.length > 2) {
-      searchTimeout.current = setTimeout(async () => {
-        setSearchResults(await api.searchContacts(val));
-      }, 300);
-    } else {
-      setSearchResults([]);
-    }
-  }, []);
 
   const handleRedeemPopcorn = async () => {
     try { await api.redeemPopcorn(status.contactId); playSound('vip'); setNotify({ message: 'Approved!', type: 'success' }); loadStatus(status.contactId); } 
@@ -1616,7 +2374,25 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames 
     catch (err) { setNotify({ message: err.message, type: 'error' }); }
   }
 
-  if (isRegistering) return <CheckIn onBack={() => setIsRegistering(false)} onSuccess={(id) => { setIsRegistering(false); loadStatus(id); }} onFocusInput={onFocusInput} />;
+  if (isRegistering) {
+    return (
+      <CheckIn
+        vipRegistration
+        onBack={() => setIsRegistering(false)}
+        onSuccess={(id, _isNew, _name, result) => {
+          setIsRegistering(false);
+          loadStatus(id);
+          setNotify({
+            message: result?.vipGranted
+              ? 'VIP registered — status active, booth points applied, +2 raffle entries'
+              : 'Welcome back — VIP status confirmed',
+            type: 'success',
+          });
+        }}
+        onFocusInput={onFocusInput}
+      />
+    );
+  }
 
   return (
     <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
@@ -1635,17 +2411,17 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames 
                     onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
                   />
                 </div>
-                {searchResults.map(c => (
-                    <div key={c.contact_id} onClick={() => { playSound('click'); loadStatus(c.contact_id); setSearch(''); setSearchResults([]); }} style={{ padding: '15px', borderBottom: '1px solid var(--glass-border)', cursor: 'pointer' }}>
-                        <strong>{c.name}</strong> ({c.email})
-                    </div>
-                ))}
+                <ContactSearchResults
+                  results={searchResults}
+                  onSelect={(c) => { loadStatus(c.contact_id); clearSearch(); }}
+                />
                 <button className="btn btn-violet" onClick={() => { playSound('click'); setIsRegistering(true); }} style={{ width: '100%', marginTop: '20px' }}>Register VIP</button>
             </div>
         </div>
       ) : (
         <div className="card" style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
           <h2 className="neon-text-lime">Member: {status.name}</h2>
+          <p style={{ opacity: 0.65, fontSize: '0.9rem', margin: '8px 0 0' }}>{status.points} pts · 👑 VIP</p>
           {status.isVip ? (
             <div style={{ marginTop: '30px' }}>
                 <p className="neon-text-pink" style={{ fontWeight: 'bold' }}>VIP ACTIVE</p>
@@ -1658,17 +2434,17 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames 
             <div style={{ marginTop: '30px' }}>
               <div className="card" style={{ background: 'rgba(255, 0, 127, 0.1)', border: '1px solid var(--cyber-pink)', marginBottom: '20px', padding: '20px' }}>
                 <h3 className="neon-text-pink" style={{ fontSize: '1.8rem', margin: '0 0 10px 0' }}>UPGRADE TO VIP: $20</h3>
-                <p style={{ fontSize: '1rem', fontWeight: 'bold', color: 'white', marginBottom: '10px' }}>INCLUDES:</p>
-                <ul style={{ listStyle: 'none', padding: 0, fontSize: '1.1rem', lineHeight: '1.6' }}>
-                  <li>✨ 1g Flower Claim</li>
-                  <li>🍿 Unlimited Popcorn Refills</li>
-                  <li>🎟️ 2 Bonus Raffle Entries</li>
+                <p style={{ fontSize: '1rem', fontWeight: 'bold', color: 'white', marginBottom: '10px' }}>VIP Experience includes:</p>
+                <ul style={{ listStyle: 'none', padding: 0, fontSize: '1rem', lineHeight: '1.6', textAlign: 'left' }}>
+                  {VIP_EXPERIENCE_PERKS.map((perk) => (
+                    <li key={perk} style={{ marginBottom: '6px' }}>★ {perk}</li>
+                  ))}
                 </ul>
               </div>
               <button className="btn btn-lime" onClick={() => { playSound('click'); setApprovalTarget('VIP UPGRADE'); }}>Grant VIP Status</button>
             </div>
           )}
-          <button className="btn" onClick={() => { playSound('click'); setStatus(null); setSearch(''); }} style={{ background: 'transparent', marginTop: '30px' }}>Exit</button>
+          <button className="btn" onClick={() => { playSound('click'); setStatus(null); clearSearch(); }} style={{ background: 'transparent', marginTop: '30px' }}>Exit</button>
         </div>
       )}
     </div>
@@ -1729,12 +2505,13 @@ const StaffQrApprovals = ({ onBack, staffName, setNotify }) => (
   </div>
 );
 
-const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNavigate }) => {
+const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNavigate, staffNames = [] }) => {
   const [contacts, setContacts] = useState([]);
   const [raffleModal, setRaffleModal] = useState(null);
   const [showWipe, setShowWipe] = useState(false);
-  const [wipePin1, setWipePin1] = useState('');
-  const [wipePin2, setWipePin2] = useState('');
+  const [wipeStep, setWipeStep] = useState('confirm');
+  const [wipePin, setWipePin] = useState('');
+  const [isDevMode, setIsDevMode] = useState(false);
   
   // New States
   const [stats, setStats] = useState({ totalUsers: 0, totalVips: 0, totalEntries: 0 });
@@ -1744,6 +2521,8 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
   const [backupSize, setBackupSize] = useState('0 KB');
   const [countdown, setCountdown] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const searchSuggestTimeout = useRef(null);
   const [healthStatus, setHealthStatus] = useState('Checking...');
   const [activeFilter, setViewFilter] = useState('all'); // all, new, vip, engaged, voted
   
@@ -1752,12 +2531,58 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
   const [redemptionModal, setRedemptionModal] = useState(null); // { id, name, currentPoints, isVip }
   const [ticketViewModal, setTicketViewModal] = useState(null); // { name, tickets }
   const [attendeeDetailModal, setAttendeeDetailModal] = useState(null);
+  const [popcornModal, setPopcornModal] = useState(null);
+  const [vipToggleTarget, setVipToggleTarget] = useState(null);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
   const [ticketCategory, setTicketCategory] = useState('Ticketing');
   const [allTickets, setAllTickets] = useState([]);
   const [showTickets, setShowTickets] = useState(false);
   const [pendingQrCount, setPendingQrCount] = useState(0);
+
+  useEffect(() => {
+    api.isDevMode().then(setIsDevMode).catch(() => setIsDevMode(false));
+  }, []);
+
+  useEffect(() => {
+    if (searchSuggestTimeout.current) clearTimeout(searchSuggestTimeout.current);
+    const trimmed = searchTerm.trim();
+    if (!trimmed) {
+      setSearchSuggestions([]);
+      return undefined;
+    }
+    searchSuggestTimeout.current = setTimeout(async () => {
+      try {
+        setSearchSuggestions(await api.searchContacts(trimmed, 8));
+      } catch {
+        setSearchSuggestions([]);
+      }
+    }, CONTACT_SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (searchSuggestTimeout.current) clearTimeout(searchSuggestTimeout.current);
+    };
+  }, [searchTerm]);
+
+  const applySearchSuggestion = (contact) => {
+    playSound('click');
+    const ref = api.contactReference(contact);
+    setSearchTerm(ref || contact.name || contact.email || contact.phone || '');
+    setSearchSuggestions([]);
+  };
+
+  const openDevClearModal = () => {
+    playSound('error');
+    setWipeStep('confirm');
+    setWipePin('');
+    setShowWipe(true);
+  };
+
+  const closeDevClearModal = () => {
+    playSound('click');
+    setShowWipe(false);
+    setWipeStep('confirm');
+    setWipePin('');
+  };
 
   const loadData = async () => {
     // Stats
@@ -1798,7 +2623,8 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
         ...c, 
         entries: await api.getEntryCount(c.contact_id),
         voted: await api.getVote(c.contact_id),
-        colombia: actions.includes('Retreat Interest'),
+        colombia: api.isColombiaRetreatInterested(c) || actions.includes('Retreat Interest'),
+        colombiaSource: c.colombia_retreat_source || null,
         actionCount: actions.length
       };
     }));
@@ -1817,6 +2643,8 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
       filtered = withCounts.filter(c => api.isContactDeclined(c));
     } else if (activeFilter === 'not-declined') {
       filtered = withCounts.filter(c => !api.isContactDeclined(c));
+    } else if (activeFilter === 'colombia') {
+      filtered = withCounts.filter(c => c.colombia);
     }
 
     setContacts(filtered);
@@ -1833,7 +2661,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
     setHealthStatus(issues > 0 ? `⚠️ ${issues} inconsistencies` : '✅ Data Healthy');
 
     try {
-      const pending = await api.getPendingMobileSignups();
+      const pending = await api.getAllPendingMobileSignups();
       setPendingQrCount(pending.length);
     } catch {
       setPendingQrCount(0);
@@ -1923,6 +2751,39 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
     loadData();
   };
 
+  const refreshPopcornContact = async (contactId) => {
+    const full = await api.getContactById(contactId);
+    if (!full) return;
+    setPopcornModal((prev) => (prev?.contact_id === contactId ? { ...prev, ...full } : prev));
+    setAttendeeDetailModal((prev) => (prev?.contact_id === contactId ? { ...prev, ...full } : prev));
+    await loadData();
+  };
+
+  const handleVipToggleApprove = async (approvingStaffName) => {
+    if (!vipToggleTarget) return;
+    const c = vipToggleTarget;
+    try {
+      await api.toggleVipWithLog(c.contact_id, c.is_vip, approvingStaffName || staffName);
+      playSound(c.is_vip ? 'click' : 'vip');
+      setNotify({
+        message: c.is_vip ? `${c.name} — VIP removed` : `${c.name} — VIP granted (+2 raffle entries)`,
+        type: 'success',
+      });
+      setVipToggleTarget(null);
+      await loadData();
+      if (attendeeDetailModal?.contact_id === c.contact_id) {
+        const updated = await api.getContactById(c.contact_id);
+        setAttendeeDetailModal({
+          ...attendeeDetailModal,
+          ...updated,
+          entries: await api.getEntryCount(c.contact_id),
+        });
+      }
+    } catch (err) {
+      setNotify({ message: err.message, type: 'error' });
+    }
+  };
+
   const handleRedeem = async (item, cost) => {
     try {
       if (item === 'VIP Upgrade') {
@@ -1940,11 +2801,21 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
     }
   };
 
-  const handleWipe = async () => {
-    const ok1 = await window.electronAPI.validateStaffPin(staffName, wipePin1);
-    const ok2 = await window.electronAPI.validateStaffPin(staffName, wipePin2);
-    if (ok1 && ok2) { await api.wipeAllData(); setNotify({ message: 'DATA WIPED', type: 'error' }); setTimeout(() => window.location.reload(), 1000); }
-    else { setNotify({ message: 'PIN mismatch', type: 'error' }); }
+  const handleClearDevTestData = async () => {
+    if (wipePin.length < 4) {
+      setNotify({ message: 'Enter your 4-digit staff PIN', type: 'error' });
+      return;
+    }
+    try {
+      await api.clearDevTestData(staffName, wipePin);
+      playSound('confirm');
+      setNotify({ message: 'Dev test data cleared', type: 'success' });
+      closeDevClearModal();
+      setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      playSound('error');
+      setNotify({ message: err.message || 'Could not clear test data', type: 'error' });
+    }
   };
 
   return (
@@ -2003,6 +2874,8 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
         </div>
       </div>
 
+      <StaffGiveawayHubReference />
+
       <div style={{ marginTop: '24px', maxWidth: '900px' }}>
         <p style={{ fontSize: '0.85rem', opacity: 0.6, marginBottom: '12px' }}>
           Quick view. Use <strong>📱 QR Approvals</strong> above for full screen approve workflow.
@@ -2021,12 +2894,38 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
           <div className="card" style={{ width: '460px', maxWidth: '92vw' }}>
             <h3 className="neon-text-lime" style={{ marginBottom: '4px' }}>{attendeeDetailModal.name}</h3>
-            <p style={{ opacity: 0.6, fontSize: '0.85rem', margin: '0 0 16px', fontFamily: 'ui-monospace, monospace' }}>
-              {api.contactReference(attendeeDetailModal) || '—'}
+            <p style={{ opacity: 0.6, fontSize: '0.85rem', margin: '0 0 16px' }}>
+              <GuestReferenceDisplay contact={attendeeDetailModal} />
             </p>
+            {api.isPrehistoricGuestReference(attendeeDetailModal) && api.legacyGuestReference(attendeeDetailModal) ? (
+              <p style={{ opacity: 0.45, fontSize: '0.75rem', margin: '-8px 0 16px' }}>
+                Prehistoric ID: {api.legacyGuestReference(attendeeDetailModal)}
+              </p>
+            ) : null}
             <div style={{ display: 'grid', gap: '12px', fontSize: '0.95rem', lineHeight: 1.5 }}>
               <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Email</span>{attendeeDetailModal.email || '—'}</div>
               <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Phone</span>{attendeeDetailModal.phone || '—'}</div>
+              <div>
+                <span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>VIP Status</span>
+                {attendeeDetailModal.is_vip ? '👑 VIP Active' : 'Standard'}
+              </div>
+              {(attendeeDetailModal.physical_tickets?.length > 0) && (
+                <div>
+                  <span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Physical Tickets (6-digit)</span>
+                  {attendeeDetailModal.physical_tickets.join(', ')}
+                </div>
+              )}
+              <div>
+                <span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Colombia Retreat</span>
+                {api.isColombiaRetreatInterested(attendeeDetailModal) ? (
+                  <>
+                    <ColombiaRetreatBadge contact={attendeeDetailModal} />
+                    <span style={{ marginLeft: '8px', opacity: 0.75 }}>
+                      {api.colombiaRetreatSourceLabel(attendeeDetailModal.colombia_retreat_source)}
+                    </span>
+                  </>
+                ) : '—'}
+              </div>
               <div>
                 <span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>QR Signup Status</span>
                 {api.isContactDeclined(attendeeDetailModal) ? 'Declined' : attendeeDetailModal.mobile_signup_confirmed || attendeeDetailModal.signup_status === 'approved' ? 'Approved' : attendeeDetailModal.mobile_signup_pending ? 'Pending' : '—'}
@@ -2040,12 +2939,69 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
               {attendeeDetailModal.mobile_signup_denied_at && (
                 <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Declined</span>{api.formatCivilianTime(attendeeDetailModal.mobile_signup_denied_at)}{attendeeDetailModal.mobile_signup_denied_by_staff ? ` by ${attendeeDetailModal.mobile_signup_denied_by_staff}` : ''}</div>
               )}
-              <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Points / Entries</span>{attendeeDetailModal.total_points} pts · {attendeeDetailModal.entries ?? 0} entries</div>
+              <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Points / Raffle Entries</span>{attendeeDetailModal.total_points} pts · {attendeeDetailModal.entries ?? 0} entries</div>
             </div>
-            <button className="btn btn-lime" style={{ width: '100%', marginTop: '20px' }} onClick={() => { playSound('click'); setAttendeeDetailModal(null); }}>Close</button>
+            <div style={{ marginTop: '16px' }}>
+              <PopcornRefillPanel
+                contact={attendeeDetailModal}
+                staffName={staffName}
+                setNotify={setNotify}
+                onDistributed={refreshPopcornContact}
+              />
+            </div>
+            <button
+              className="btn"
+              style={{
+                width: '100%',
+                marginTop: '16px',
+                background: attendeeDetailModal.is_vip ? 'rgba(255,80,80,0.15)' : 'rgba(204,255,0,0.12)',
+                border: attendeeDetailModal.is_vip ? '1px solid rgba(255,80,80,0.45)' : '1px solid var(--neon-lime)',
+                color: attendeeDetailModal.is_vip ? '#ff8a8a' : 'var(--neon-lime)',
+              }}
+              onClick={() => { playSound('click'); setVipToggleTarget(attendeeDetailModal); }}
+            >
+              {attendeeDetailModal.is_vip ? 'Remove VIP Status' : 'Make VIP (+2 raffle entries)'}
+            </button>
+            <button className="btn btn-lime" style={{ width: '100%', marginTop: '10px' }} onClick={() => { playSound('click'); setAttendeeDetailModal(null); }}>Close</button>
           </div>
         </div>
       )}
+
+      {popcornModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4100 }}>
+          <div className="card" style={{ width: '480px', maxWidth: '92vw' }}>
+            <h3 className="neon-text-lime" style={{ margin: '0 0 4px' }}>Popcorn Manager</h3>
+            <p style={{ margin: '0 0 16px', opacity: 0.65, fontSize: '0.9rem' }}>
+              {popcornModal.name}
+              {api.contactReference(popcornModal) ? ` · ${api.contactReference(popcornModal)}` : ''}
+            </p>
+            <PopcornRefillPanel
+              contact={popcornModal}
+              staffName={staffName}
+              setNotify={setNotify}
+              onDistributed={refreshPopcornContact}
+            />
+            <button
+              type="button"
+              className="btn"
+              style={{ width: '100%', marginTop: '14px', background: 'transparent' }}
+              onClick={() => { playSound('click'); setPopcornModal(null); }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      <StaffApprovalModal
+        isOpen={!!vipToggleTarget}
+        actionName={vipToggleTarget?.is_vip ? 'Remove VIP Status' : 'Grant VIP Status'}
+        onClose={() => setVipToggleTarget(null)}
+        onApprove={handleVipToggleApprove}
+        onFocusInput={onFocusInput}
+        setNotify={setNotify}
+        staffNames={staffNames}
+      />
 
       {raffleModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
@@ -2195,28 +3151,60 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
       )}
 
       {showWipe && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000 }}>
-          <div className="card" style={{ width: '500px', textAlign: 'center' }}><h2>⚠️ WIPE DATA ⚠️</h2><p>Delete all event data?</p>
-            <div className="input-group">
-              <input 
-                type="password" 
-                placeholder="PIN" 
-                value={wipePin1} 
-                readOnly 
-                onClick={(e) => onFocusInput('numeric', wipePin1, setWipePin1, 4, null, e.currentTarget)}
-              />
-            </div>
-            <div className="input-group">
-              <input 
-                type="password" 
-                placeholder="Confirm PIN" 
-                value={wipePin2} 
-                readOnly 
-                onClick={(e) => onFocusInput('numeric', wipePin2, setWipePin2, 4, null, e.currentTarget)}
-              />
-            </div>
-            <button className="btn" style={{ background: 'white', color: 'red' }} onClick={() => { playSound('error'); handleWipe(); }}>ERASE ALL</button>
-            <button className="btn" onClick={() => { playSound('click'); setShowWipe(false); }} style={{ background: 'transparent', color: 'white' }}>Cancel</button>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(120, 0, 0, 0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000, padding: '24px' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '480px', textAlign: 'center', border: '2px solid #ef4444', background: 'rgba(20, 0, 0, 0.95)' }}>
+            <h2 style={{ color: '#ff6b6b', marginBottom: '8px' }}>⚠️ Clear Dev Test Data?</h2>
+            {wipeStep === 'confirm' ? (
+              <>
+                <p style={{ opacity: 0.85, lineHeight: 1.55, margin: '0 0 20px' }}>
+                  This removes all test contacts, votes, signups, and staff logs created during <strong>npm run dev</strong>.
+                  It does not run on production show PCs.
+                </p>
+                <p style={{ color: '#ffb347', fontSize: '0.9rem', marginBottom: '24px' }}>Are you sure you want to continue?</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ width: '100%', margin: 0, background: '#dc2626', color: '#fff', border: '2px solid #ef4444', fontWeight: 'bold' }}
+                    onClick={() => { playSound('click'); setWipeStep('pin'); }}
+                  >
+                    Yes, continue
+                  </button>
+                  <button type="button" className="btn" style={{ width: '100%', margin: 0, background: 'transparent' }} onClick={closeDevClearModal}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ opacity: 0.8, margin: '0 0 16px' }}>Enter your staff PIN to confirm.</p>
+                <div className="input-group">
+                  <input
+                    type="password"
+                    placeholder="Staff PIN"
+                    value={wipePin}
+                    readOnly
+                    onClick={(e) => onFocusInput('numeric', wipePin, setWipePin, 4, null, e.currentTarget)}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ width: '100%', margin: 0, background: '#dc2626', color: '#fff', border: '2px solid #ef4444', fontWeight: 'bold' }}
+                    onClick={() => { playSound('error'); handleClearDevTestData(); }}
+                  >
+                    Clear test data
+                  </button>
+                  <button type="button" className="btn" style={{ width: '100%', margin: 0, background: 'transparent' }} onClick={() => { playSound('click'); setWipeStep('confirm'); setWipePin(''); }}>
+                    Back
+                  </button>
+                  <button type="button" className="btn" style={{ width: '100%', margin: 0, background: 'transparent', opacity: 0.7 }} onClick={closeDevClearModal}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2229,14 +3217,25 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
               🎫 View Tickets ({allTickets.filter(t => t.status === 'Open').length} Open)
             </button>
           </div>
-          <input 
-            type="text" 
-            placeholder="Search name, email, phone, or reference (e.g. CND-00007)..." 
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '10px 20px', borderRadius: '10px', color: 'white', width: '360px' }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onFocus={() => onFocusInput?.(searchTerm, (val) => setSearchTerm(val))}
-          />
+          <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
+            <input
+              type="text"
+              placeholder="Search name, email, phone, or reference (e.g. CND-00007)..."
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '10px 20px', borderRadius: '10px', color: 'white', width: '100%' }}
+              value={searchTerm}
+              readOnly
+              onClick={(e) => onFocusInput('default', searchTerm, setSearchTerm, null, null, e.currentTarget)}
+            />
+            {searchSuggestions.length > 0 && (
+              <div className="contact-search-results contact-search-results--dropdown">
+                <ContactSearchResults
+                  results={searchSuggestions}
+                  onSelect={applySearchSuggestion}
+                  hint="Attendee matches — tap to filter"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Filter Tabs */}
@@ -2248,7 +3247,8 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
             { id: 'new', label: 'New/Inactive' },
             { id: 'vip', label: 'VIP Members' },
             { id: 'engaged', label: 'Engaged (Active)' },
-            { id: 'voted', label: 'Voted on Flavors' }
+            { id: 'voted', label: 'Voted on Flavors' },
+            { id: 'colombia', label: 'Colombia Retreat 🇨🇴' }
           ].map(tab => (
             <button 
               key={tab.id}
@@ -2275,7 +3275,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border)', opacity: 0.7, fontSize: '0.9rem' }}>
-              <th>Reference</th><th>Status</th><th>Name</th><th>Points</th><th>Total Tickets</th><th>VIP</th><th>🌸</th><th>🗳️</th><th>🇨🇴</th><th>Action</th>
+              <th>Reference</th><th>Status</th><th>Name</th><th>Points</th><th>Total Tickets</th><th>VIP</th><th>🍿</th><th>🌸</th><th>🗳️</th><th>🇨🇴</th><th>Action</th>
             </tr>
           </thead>
           <tbody>{contacts.map(c => {
@@ -2284,9 +3284,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
             <tr key={c.contact_id} style={{ borderBottom: '1px solid var(--glass-border)', opacity: declined ? 0.5 : 1, background: declined ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
               <td
                 style={{
-                  fontFamily: 'ui-monospace, monospace',
                   fontSize: '0.8rem',
-                  color: api.contactReference(c) ? (declined ? 'rgba(255,255,255,0.45)' : 'var(--neon-lime)') : 'rgba(255,255,255,0.35)',
                   cursor: 'pointer',
                   textDecoration: 'underline',
                   textDecorationColor: 'rgba(204,255,0,0.35)',
@@ -2298,9 +3296,10 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
                   setAttendeeDetailModal(full || c);
                 }}
               >
-                {api.contactReference(c) || '—'}
+                <GuestReferenceDisplay contact={c} declined={declined} />
               </td>
               <td>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                 {declined ? (
                   <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 'bold', background: 'rgba(255,80,80,0.15)', color: '#ff6b6b' }}>DECLINED</span>
                 ) : c.mobile_signup_confirmed || c.signup_status === 'approved' ? (
@@ -2310,6 +3309,8 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
                 ) : (
                   <span style={{ opacity: 0.35, fontSize: '0.75rem' }}>—</span>
                 )}
+                {c.colombia ? <ColombiaRetreatBadge contact={c} compact /> : null}
+                </div>
               </td>
               <td
                 style={{ color: declined ? 'rgba(255,255,255,0.55)' : 'inherit', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.25)' }}
@@ -2329,11 +3330,31 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
                 <span style={{ fontWeight: 'bold', color: 'var(--neon-lime)' }}>{c.entries}</span>
                 {c.physical_tickets?.length > 0 && <span style={{ fontSize: '0.7rem', opacity: 0.6, marginLeft: '5px' }}>({c.physical_tickets.length} Physical 🔍)</span>}
               </td>
-              <td><span className="icon-btn" onClick={() => c.is_vip && setNotify({ message: 'VIP Status Active', type: 'success' })}>{c.is_vip ? '✅' : ''}</span></td>
+              <td><span className="icon-btn" title={c.is_vip ? 'VIP active' : 'Not VIP'}>{c.is_vip ? '👑' : ''}</span></td>
+              <td
+                style={{ cursor: c.is_vip ? 'pointer' : 'default' }}
+                title={c.is_vip ? 'Open popcorn manager' : 'Not VIP'}
+                onClick={() => {
+                  if (!c.is_vip) return;
+                  playSound('click');
+                  setPopcornModal(c);
+                }}
+              >
+                <PopcornStatusChip isVip={c.is_vip} lastRedeemed={c.vip_popcorn_last_redeemed_at} />
+              </td>
               <td><span className="icon-btn" onClick={() => c.flower_claimed && setNotify({ message: '1g Flower Perk Claimed', type: 'success' })}>{c.flower_claimed ? '🌸' : ''}</span></td>
               <td><span className="icon-btn" onClick={() => c.voted && setNotify({ message: 'User has Voted on Seasonings', type: 'success' })}>{c.voted ? '🗳️' : ''}</span></td>
-              <td><span className="icon-btn" onClick={() => c.colombia && setNotify({ message: 'Interested in Colombia Retreat', type: 'success' })}>{c.colombia ? '🔥' : ''}</span></td>
+              <td><span className="icon-btn" title={c.colombia ? api.colombiaRetreatSourceLabel(c.colombiaSource) : ''} onClick={() => c.colombia && setNotify({ message: `Colombia Retreat — ${api.colombiaRetreatSourceLabel(c.colombiaSource)}`, type: 'success' })}>{c.colombia ? '🔥' : ''}</span></td>
               <td style={{ display: 'flex', gap: '5px', padding: '10px' }}>
+                <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px' }} title={c.is_vip ? 'Remove VIP' : 'Make VIP'} onClick={() => { playSound('click'); setVipToggleTarget(c); }}>{c.is_vip ? '👑' : '👑+'}</button>
+                <button
+                  className="btn"
+                  style={{ minWidth: 'auto', padding: '5px 10px', opacity: c.is_vip ? 1 : 0.4 }}
+                  title={c.is_vip ? 'Popcorn manager' : 'VIP required for popcorn'}
+                  onClick={() => { playSound('click'); setPopcornModal(c); }}
+                >
+                  🍿
+                </button>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px' }} onClick={() => { playSound('click'); setRaffleModal({ id: c.contact_id, name: c.name }); }}>🎟️ Adjust</button>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--neon-lime)' }} onClick={() => setRedemptionModal({ id: c.contact_id, name: c.name, currentPoints: c.total_points, isVip: c.is_vip })}>🎁 Redeem</button>
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid gray' }} onClick={() => setSupportModal({ id: c.contact_id, name: c.name })}>💬 Support</button>
@@ -2374,7 +3395,46 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', marginTop: '30px' }}><button className="btn btn-violet" onClick={() => { playSound('error'); setShowWipe(true); }}>Wipe Data</button><button className="btn" onClick={() => { playSound('click'); onLogout(); }}>Logout</button></div>
+      <div style={{ marginTop: '56px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px' }}>
+        <button
+          type="button"
+          className="btn btn-violet"
+          style={{ minWidth: '220px', margin: 0 }}
+          onClick={() => { playSound('click'); onLogout(); }}
+        >
+          Return to Home
+        </button>
+
+        {isDevMode ? (
+          <div style={{
+            width: '100%',
+            maxWidth: '520px',
+            paddingTop: '28px',
+            borderTop: '1px solid rgba(255, 80, 80, 0.25)',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '0.78rem', opacity: 0.55, margin: '0 0 16px', lineHeight: 1.5 }}>
+              Development only — clears local test data from npm run dev (contacts, votes, QR signups)
+            </p>
+            <button
+              type="button"
+              className="btn"
+              style={{
+                minWidth: '280px',
+                margin: 0,
+                background: '#b91c1c',
+                color: '#fff',
+                border: '2px solid #ef4444',
+                fontWeight: 'bold',
+                boxShadow: '0 0 24px rgba(220, 38, 38, 0.35)',
+              }}
+              onClick={openDevClearModal}
+            >
+              Clear Dev Test Data
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 };
@@ -2399,7 +3459,7 @@ const AddTicket = ({ onBack, setNotify, onFocusInput, currentContactId }) => {
   const handleSearch = useCallback(async (val) => {
     setSearch(val);
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (val.length > 2) {
+    if (val.length >= 1) {
       searchTimeout.current = setTimeout(async () => {
         setSearchResults(await api.searchContacts(val));
       }, 300);
@@ -2441,13 +3501,10 @@ const AddTicket = ({ onBack, setNotify, onFocusInput, currentContactId }) => {
                     onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
             />
           </div>
-          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-            {searchResults.map(c => (
-              <div key={c.contact_id} onClick={() => { playSound('click'); setSelectedAccount(c); }} style={{ padding: '15px', borderBottom: '1px solid var(--glass-border)', cursor: 'pointer' }}>
-                <strong>{c.name}</strong> ({c.email || c.phone})
-              </div>
-            ))}
-          </div>
+          <ContactSearchResults
+            results={searchResults}
+            onSelect={(c) => setSelectedAccount(c)}
+          />
         </div>
       ) : (
         <div className="card" style={{ width: '100%', maxWidth: '600px', textAlign: 'center' }}>
@@ -2529,6 +3586,13 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
   const [loading, setLoading] = useState(false);
   const [signedUp, setSignedUp] = useState(false);
 
+  useEffect(() => {
+    if (!currentContactId) return;
+    api.getContactById(currentContactId).then((contact) => {
+      if (contact && api.isColombiaRetreatInterested(contact)) setSignedUp(true);
+    });
+  }, [currentContactId]);
+
   const amenities = [
     { icon: '🌿', text: 'Cannabis Farm Tour' },
     { icon: '🚤', text: 'Private Boat Tour' },
@@ -2551,7 +3615,7 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
     }
     setLoading(true);
     try {
-      await api.verifyAndAwardAction(currentContactId, 'Retreat Interest', 'System');
+      await api.markColombiaRetreatInterest(currentContactId, 'kiosk_early_bird', 'System');
       setNotify({ message: 'Early Bird Spot Reserved!', type: 'success' });
       setSignedUp(true);
     } catch (err) {
@@ -2565,15 +3629,10 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
     <div className="view-container" style={{ padding: '40px 20px', overflowY: 'auto' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         {/* Header Hero */}
-        <div className="card" style={{ 
-          background: 'linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url("https://images.unsplash.com/photo-1518182170546-07661fd94144?auto=format&fit=crop&w=1000&q=80")',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          textAlign: 'center',
-          padding: '60px 20px',
-          border: '2px solid var(--neon-lime)',
-          marginBottom: '30px'
-        }}>
+        <div
+          className="card colombia-retreat-hero"
+          style={{ '--colombia-hero-url': `url("${COLOMBIA_RETREAT_HERO_IMAGE}")`, marginBottom: '30px' }}
+        >
           <h1 className="neon-text-lime" style={{ fontSize: '3.5rem', marginBottom: '10px' }}>RETREAT TO COLOMBIA</h1>
           <h2 style={{ letterSpacing: '4px', opacity: 0.9 }}>THE ULTIMATE GŪD EXPERIENCE</h2>
         </div>
@@ -2620,79 +3679,201 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
           )}
         </div>
 
+        <div className="card" style={{ marginTop: '30px', border: '1px solid var(--neon-lime)', background: 'rgba(204,255,0,0.04)' }}>
+          <MobileSignupPanel
+            stream="colombia_retreat"
+            title="Phone Sign-Up — Colombia Retreat"
+            showQr
+            showPending={false}
+            staffName="Colombia Page"
+            onApproved={() => setNotify({ message: 'Colombia retreat signup approved.', type: 'success' })}
+            onDeclined={() => setNotify({ message: 'Signup declined.', type: 'success' })}
+            onError={(msg) => setNotify({ message: msg, type: 'error' })}
+          />
+        </div>
+
         <center><button className="btn" style={{ marginTop: '40px', background: 'transparent' }} onClick={onBack}>Back to Home</button></center>
       </div>
     </div>
   );
 };
 
-const FlavorVote = ({ contactId, onBack, setNotify }) => {
-  const [voted, setVoted] = useState(false);
+const FlavorVote = ({ contactId, onBack, setNotify, onFocusInput, onSuccess }) => {
+  const { search, searchResults, handleSearch, clearSearch } = useContactSearch();
+  const [step, setStep] = useState('pick');
+  const [selectedFlavor, setSelectedFlavor] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [priorVote, setPriorVote] = useState(null);
+  const [sessionContact, setSessionContact] = useState(null);
 
   useEffect(() => {
-    const checkVote = async () => {
-      if (contactId) {
-        const existing = await api.getVote(contactId);
-        if (existing) {
-          setVoted(true);
-          setNotify({ message: `You've already voted for ${existing.seasoning_name}!`, type: 'info' });
-          setTimeout(onBack, 3000);
-        }
-      }
-    };
-    checkVote();
-  }, [contactId, onBack, setNotify]);
-
-  const handleVote = async (flavor) => {
     if (!contactId) {
-      setNotify({ message: 'Please Check-In First!', type: 'error' });
+      setSessionContact(null);
       return;
     }
+    Promise.all([api.getContactById(contactId), api.getVote(contactId)]).then(([contact, vote]) => {
+      setSessionContact(contact || null);
+      if (vote) {
+        setPriorVote(vote.seasoning_name);
+        setStep('done');
+      }
+    });
+  }, [contactId]);
+
+  const allocateVote = async (id) => {
+    if (!selectedFlavor || loading) return;
     setLoading(true);
     try {
-      await api.castVote(contactId, flavor);
+      const existing = await api.getVote(id);
+      if (existing) {
+        playSound('error');
+        setNotify({
+          message: `This guest already voted for ${existing.seasoning_name}. One vote per person.`,
+          type: 'error',
+        });
+        return;
+      }
+      await api.castVote(id, selectedFlavor);
+      onSuccess?.(id);
       playSound('points');
-      setNotify({ message: `Voted for ${flavor}! +50 Points`, type: 'success' });
-      setVoted(true);
-      setTimeout(onBack, 2000);
+      setNotify({ message: `Voted for ${selectedFlavor}! +50 Points`, type: 'success' });
+      setStep('done');
+      setTimeout(onBack, 2500);
     } catch (err) {
       playSound('error');
-      setNotify({ message: err.message, type: 'error' });
+      setNotify({ message: err.message || 'Could not save vote', type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
+  const handlePickFlavor = (flavor) => {
+    playSound('click');
+    setSelectedFlavor(flavor);
+    setStep('identify');
+  };
+
+  const handleSelectContact = (id) => {
+    clearSearch();
+    allocateVote(id);
+  };
+
+  if (isRegistering) {
+    return (
+      <CheckIn
+        onBack={() => setIsRegistering(false)}
+        onSuccess={(id) => {
+          setIsRegistering(false);
+          allocateVote(id);
+        }}
+        onFocusInput={onFocusInput}
+      />
+    );
+  }
+
+  if (step === 'done') {
+    return (
+      <div className="view-container" style={{ padding: '50px', textAlign: 'center', overflowY: 'auto' }}>
+        <div className="card" style={{ maxWidth: '520px', margin: '0 auto', border: '2px solid var(--neon-lime)' }}>
+          <h2 className="neon-text-lime" style={{ marginBottom: '12px' }}>Vote Recorded</h2>
+          <p style={{ opacity: 0.85, lineHeight: 1.6 }}>
+            {priorVote
+              ? <>You already rated <strong>{priorVote}</strong>. One vote per guest.</>
+              : <>Thanks! Your flavor vote is saved.</>}
+          </p>
+          <button className="btn btn-lime" style={{ width: '100%', marginTop: '24px' }} onClick={() => { playSound('click'); onBack(); }}>
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'identify') {
+    return (
+      <div className="view-container" style={{ padding: '40px 24px', overflowY: 'auto' }}>
+        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <div className="card" style={{ marginBottom: '24px', textAlign: 'center', border: '1px solid var(--electric-violet)', background: 'rgba(139, 0, 255, 0.08)' }}>
+            <p style={{ margin: 0, opacity: 0.65, fontSize: '0.85rem' }}>Your flavor pick</p>
+            <h2 className="neon-text-lime" style={{ margin: '8px 0 0', fontSize: '1.4rem' }}>{selectedFlavor}</h2>
+            <button
+              type="button"
+              className="btn"
+              style={{ marginTop: '16px', background: 'transparent', fontSize: '0.85rem', padding: '6px 14px' }}
+              onClick={() => { playSound('click'); setStep('pick'); }}
+            >
+              Change flavor
+            </button>
+          </div>
+
+          <AccountLookupCard
+            search={search}
+            searchResults={searchResults}
+            onSearch={handleSearch}
+            onSelectContact={handleSelectContact}
+            onRegister={() => { playSound('click'); setIsRegistering(true); }}
+            onFocusInput={onFocusInput}
+            onNavigateHome={() => { playSound('click'); onBack(); }}
+            title="Link your vote"
+            description="Search by name, email, phone, or reference (e.g. CND-00007), then tap your account to save your vote and earn 50 points."
+            registerLabel="New here? Register & vote"
+            showBackHome={false}
+          />
+
+          {sessionContact && (
+            <div className="card" style={{ marginBottom: '24px', textAlign: 'center', border: '1px solid var(--neon-lime)' }}>
+              <p style={{ margin: '0 0 12px', opacity: 0.75 }}>Already checked in on this kiosk?</p>
+              <button
+                type="button"
+                className="btn btn-lime"
+                style={{ width: '100%', margin: 0 }}
+                disabled={loading}
+                onClick={() => allocateVote(sessionContact.contact_id)}
+              >
+                {loading ? 'Saving…' : `Save vote as ${sessionContact.name}`}
+              </button>
+            </div>
+          )}
+
+          <button className="btn" style={{ width: '100%', background: 'transparent' }} onClick={() => { playSound('click'); onBack(); }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="view-container" style={{ padding: '50px', textAlign: 'center', overflowY: 'auto' }}>
       <h2 className="neon-text-lime" style={{ marginBottom: '10px' }}>Rate Your Favorite Flavor</h2>
-      <p style={{ opacity: 0.7, marginBottom: '40px' }}>Select the seasoning you enjoyed most to earn 50 points!</p>
-      
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(2, 1fr)', 
-        gap: '20px', 
-        maxWidth: '800px', 
-        margin: '0 auto' 
+      <p style={{ opacity: 0.7, marginBottom: '40px' }}>Tap a seasoning — then link your account to earn 50 points (one vote per guest).</p>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '20px',
+        maxWidth: '800px',
+        margin: '0 auto',
       }}>
-        {FLAVORS.map(flavor => (
-          <button 
-            key={flavor} 
-            className="card btn" 
-            style={{ 
-              padding: '40px 20px', 
-              fontSize: '1.3rem', 
-              textTransform: 'uppercase', 
-              borderColor: 'var(--glass-border)',
+        {FLAVORS.map((flavor) => (
+          <button
+            key={flavor}
+            type="button"
+            className="card btn"
+            style={{
+              padding: '40px 20px',
+              fontSize: '1.3rem',
+              textTransform: 'uppercase',
+              borderColor: selectedFlavor === flavor ? 'var(--neon-lime)' : 'var(--glass-border)',
               margin: 0,
               width: '100%',
               display: 'flex',
               flexDirection: 'column',
-              height: 'auto'
+              height: 'auto',
             }}
-            onClick={() => handleVote(flavor)}
-            disabled={voted || loading}
+            onClick={() => handlePickFlavor(flavor)}
+            disabled={loading}
           >
             {flavor}
           </button>
@@ -2741,7 +3922,9 @@ const App = () => {
   }, [currentContactId, activeStaff, showVipModal, view]);
 
   useEffect(() => {
-    window.electronAPI.getStaffNames().then(setStaffNames).catch(() => setStaffNames([]));
+    window.electronAPI?.getStaffNames?.()
+      .then((names) => setStaffNames(Array.isArray(names) ? names : []))
+      .catch(() => setStaffNames([]));
   }, []);
 
   useEffect(() => {
@@ -2886,7 +4069,15 @@ const App = () => {
         {view === 'menu-products' && <ProductMenu onBack={() => navigate('main-menu')} />}
         {view === 'add-ticket' && <AddTicket onBack={() => navigate('home')} setNotify={setNotify} onFocusInput={openKeyboard} currentContactId={currentContactId} />}
         {view === 'colombia' && <ColombiaRetreat onBack={() => navigate('home')} onNavigate={navigate} currentContactId={currentContactId} setNotify={setNotify} />}
-        {view === 'vote' && <FlavorVote contactId={currentContactId} onBack={() => navigate('home')} setNotify={setNotify} />}
+        {view === 'vote' && (
+          <FlavorVote
+            contactId={currentContactId}
+            onBack={() => navigate('home')}
+            setNotify={setNotify}
+            onFocusInput={openKeyboard}
+            onSuccess={setCurrentContactId}
+          />
+        )}
         {view === 'register' && <CheckIn onBack={() => navigate('home')} onSuccess={handleCheckInSuccess} onFocusInput={openKeyboard} />}
         {view === 'thank-you' && <ThankYou name={currentContactFirstName || currentContactName} isNew={isNewUser} onContinue={() => navigate('main-menu')} />}
         {view === 'profile' && <Profile contactId={currentContactId} onNavigate={navigate} />}
@@ -2894,7 +4085,16 @@ const App = () => {
         {view === 'vip' && <VipLounge onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
         
         {view === 'staff-login' && <StaffLogin onBack={() => navigate('home')} onLoginSuccess={(name) => { setActiveStaff(name); navigate('staff-dashboard'); }} onFocusInput={openKeyboard} setNotify={setNotify} staffNames={staffNames} />}
-        {view === 'staff-dashboard' && <StaffDashboard onLogout={() => { setActiveStaff(null); navigate('home'); }} staffName={activeStaff} setNotify={setNotify} onFocusInput={openKeyboard} onNavigate={navigate} />}
+        {view === 'staff-dashboard' && (
+          <StaffDashboard
+            onLogout={() => { setActiveStaff(null); navigate('home'); }}
+            staffName={activeStaff}
+            setNotify={setNotify}
+            onFocusInput={openKeyboard}
+            onNavigate={navigate}
+            staffNames={staffNames}
+          />
+        )}
         {view === 'staff-qr-queue' && activeStaff && <StaffQrApprovals onBack={() => navigate('staff-dashboard')} staffName={activeStaff} setNotify={setNotify} />}
         
         {view !== 'home' && view !== 'thank-you' && (

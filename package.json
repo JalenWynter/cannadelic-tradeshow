@@ -7,11 +7,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "SIGNUP_SYNC_CONFIG=config/signup-sync.dev.json vite",
+    "dev:cloud": "vite",
     "electron:dev": "electron src/main.js",
     "build": "vite build && vite build --mode electron-main",
     "preview": "npm run build && electron dist-electron/main.js",
     "build:win": "npm run build && electron-builder --win",
     "validate:show": "bash scripts/validate-show.sh",
+    "validate:floor": "node scripts/validate-show-config.mjs config/signup-sync.show.json",
+    "setup:show": "node scripts/setup-show-pc.mjs",
     "deploy:railway": "bash scripts/railway-phase1.sh"
   },
   "build": {
@@ -27,7 +31,10 @@
       "dist-electron/**/*",
       "preload.js",
       "package.json",
-      "config/staff.roster.example.json"
+      "config/signup-sync.show.json",
+      "config/staff.roster.show.json",
+      "config/staff.roster.example.json",
+      "public/**/*"
     ],
     "directories": {
       "output": "release"

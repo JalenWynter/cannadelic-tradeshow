@@ -15,10 +15,14 @@ export function staffSignupRecord(signup) {
     deniedAt: signup.deniedAt || null,
     deniedByStaff: signup.deniedByStaff || null,
     deniedByKiosk: signup.deniedByKiosk || null,
+    eventId: signup.eventId || null,
   };
 }
 
-export function staffMonitorPageHtml(eventId) {
+export function staffMonitorPageHtml(eventIds) {
+  const ids = Array.isArray(eventIds) ? eventIds : [eventIds].filter(Boolean);
+  const primaryEventId = ids[0] || '';
+  const eventIdParam = ids.length > 0 ? ids.join(',') : '';
   return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"/>
@@ -101,6 +105,8 @@ h2{font-size:.95rem;margin:16px 0 10px;color:#ccff00;letter-spacing:.5px}
 </style></head><body>
 <h1>Staff QR Queue</h1>
 <p class="sub">Approve to save guest data, or decline to remove from queue. All records stay in History.</p>
+<p class="sub" id="eventInfo"></p>
+<p class="sub" style="margin-top:4px;font-size:.78rem" id="multiEventInfo"></p>
 <div class="stats">
   <div class="stat"><strong id="statPending">0</strong><span>Pending</span></div>
   <div class="stat"><strong id="statApproved">0</strong><span>Approved</span></div>
@@ -149,7 +155,9 @@ h2{font-size:.95rem;margin:16px 0 10px;color:#ccff00;letter-spacing:.5px}
 </div>
 <div id="toast" class="toast"></div>
 <script>
-const EVENT_ID=${JSON.stringify(eventId)};
+const EVENT_IDS=${JSON.stringify(ids)};
+const PRIMARY_EVENT_ID=${JSON.stringify(primaryEventId)};
+const IS_MULTI=ids.length>1;
 let confirmSignupId=null;
 let confirmAction=null;
 let activeView='queue';
@@ -237,10 +245,22 @@ async function copyText(text,label){
 }
 
 function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+function eventBadge(eventId){
+  if(!eventId)return'';
+  if(String(eventId).includes('colombia'))return' 🇨🇴';
+  if(String(eventId).includes('cannadelic'))return' 🍿';
+  return'';
+}
+function eventLabel(eventId){
+  if(!eventId)return'';
+  if(String(eventId).includes('colombia'))return'Colombia';
+  if(String(eventId).includes('cannadelic'))return'Cannadelic';
+  return eventId;
+}
 function matchesSearch(s){
   const q=searchQuery.trim().toLowerCase();
   if(!q)return true;
-  const digits=q.replace(/\\D/g,'');
+  const digits=q.replace(/\D/g,'');
   const hay=[
     s.displayId||'',
     s.firstName||'',
@@ -348,7 +368,8 @@ function renderPending(rows){
   el.innerHTML=rows.map(s=>{
     const name=esc((s.firstName||'')+' '+(s.lastName||'')).trim();
     const confirming=confirmSignupId===s.signupId;
-    const idTag=s.displayId?'<div class="id-tag">'+esc(s.displayId)+'</div>':'';
+    const badge=eventBadge(s.eventId||EVENT_ID);
+    const idTag=s.displayId?'<div class="id-tag">'+esc(s.displayId)+badge+'</div>':'<div class="id-tag" style="font-size:.75rem;opacity:.6">'+esc(s.eventId||'')+badge+'</div>';
     let actions='';
     if(confirming){
       const isDecline=confirmAction==='deny';
@@ -388,7 +409,8 @@ function renderHistory(rows){
   const rowsHtml=visible.map(s=>{
     const isApproved=s.status==='confirmed';
     const name=esc((s.firstName||'')+' '+(s.lastName||'')).trim()||'Guest';
-    const sub=esc(s.displayId||s.email||s.phone||'No ID');
+    const badge=eventBadge(s.eventId||EVENT_ID);
+    const sub=(s.displayId?esc(s.displayId)+badge+' · ':esc(s.email||s.phone||'No ID'));
     const actionTime=historyActionTime(s);
     const badge=isApproved
       ?'<span class="badge approved">✓</span>'
@@ -425,10 +447,29 @@ function updateStats(data){
 }
 async function load(){
   try{
-    const res=await fetch('/api/signup/all/public?eventId='+encodeURIComponent(EVENT_ID),{cache:'no-store'});
+    let url='/api/signup/all/public';
+    if(IS_MULTI){
+      url+='?eventId='+EVENT_IDS.map(encodeURIComponent).join(',');
+    } else if(PRIMARY_EVENT_ID) {
+      url+='?eventId='+encodeURIComponent(PRIMARY_EVENT_ID);
+    }
+    const res=await fetch(url,{cache:'no-store'});
     const data=await res.json();
     allSignups=data.signups||[];
     updateStats(data);
+    const info=document.getElementById('multiEventInfo');
+    if(IS_MULTI){
+      const labels=allSignups.reduce((acc,s)=>{
+        const l=eventLabel(s.eventId);
+        if(!acc[l])acc[l]=0;
+        acc[l]++;
+        return acc;
+      },{});
+      info.textContent='Showing: '+Object.entries(labels).map(([l,n])=>l+' ('+n+')').join(' · ');
+      info.style.display='';
+    } else {
+      info.style.display='none';
+    }
     rerender();
   }catch(e){
     showToast('Could not refresh queue',true);

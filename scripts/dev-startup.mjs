@@ -6,8 +6,16 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 
+function resolveConfigPath() {
+  const override = process.env.SIGNUP_SYNC_CONFIG?.trim();
+  if (override) {
+    return path.isAbsolute(override) ? override : path.join(root, override);
+  }
+  return path.join(root, 'config', 'signup-sync.json');
+}
+
 export function readProjectSignupConfig() {
-  const configPath = path.join(root, 'config', 'signup-sync.json');
+  const configPath = resolveConfigPath();
   if (!fs.existsSync(configPath)) return null;
   try {
     return JSON.parse(fs.readFileSync(configPath, 'utf-8'));

@@ -12,7 +12,10 @@ Documentation for systems engineering, networking, and internal IT teams operati
 | [Deployment](./deployment.md) | Ops | Build, install, show-day checklist |
 | [Show-day setup](./show-day-setup.md) | Ops / on-site IT | Mobile QR (LTE), dual kiosk, pre-show checks |
 | [Hotspot show setup](./hotspot-show-setup.md) | Ops / on-site IT | **No venue Wi‑Fi** — phone hotspot + Railway (Option A) |
+| [**Show floor setup (root)**](../../SHOW-FLOOR-SETUP.md) | Ops / on-site IT | **Build, install, booth checklist, hotfix matrix** |
+| [Staff VIP & points](./staff-vip-and-points.md) | Staff / Ops | Grant VIP, tickets, Raffle Hub verify flow |
 | [Railway deploy](./railway-deploy.md) | Engineering / IT | One-time cloud relay deployment |
+| [GitHub + Railway workflow](./github-railway-workflow.md) | Developers | Push → CI → Railway auto-deploy loop |
 | [Runbook](./runbook.md) | On-site IT | Day-of troubleshooting |
 | [Data & privacy](./data-privacy.md) | Compliance / IT | PII handling, retention, export |
 | [Incident response](./incident-response.md) | All IT | Breach, loss, kiosk compromise |
@@ -45,12 +48,13 @@ gudessence-tradeshow-app/
 
 ## Show-day summary
 
-**No venue Wi‑Fi?** Use [Hotspot show setup](./hotspot-show-setup.md) — staff phone hotspot + Railway relay.
+**On-site checklist:** [SHOW-FLOOR-SETUP.md](../../SHOW-FLOOR-SETUP.md) (repo root) — clone, `npm run setup:show`, install, dual touch monitors.
 
-1. Deploy **Railway relay** → [railway-deploy.md](./railway-deploy.md)
-2. Configure `signup-sync.json` on kiosk → run `npm run validate:show`
+**No venue Wi‑Fi?** [Hotspot show setup](./hotspot-show-setup.md) — staff phone hotspot + Railway relay.
+
+1. Clone repo → `npm run setup:show` (validates Railway + builds Windows installer)
+2. Bundled `config/signup-sync.show.json` + `staff.roster.show.json` auto-seed on first launch — **no manual AppData copy**
 3. Kiosk laptop on **staff hotspot**; guests on **LTE** scan QR
-4. Sync shows **🟢 Cloud relay live — hotspot + LTE ready**
-5. Copy `config/staff.roster.example.json` → `%AppData%\gudessence-tradeshow-app\staff.roster.json` and set PINs
-6. Run built `.exe` on show PC (not `npm run dev`)
-7. After event: export backups from `%AppData%\gudessence-tradeshow-app\backups\`
+4. Sync shows **🟢 HTTPS sync live — any network**
+5. Run installed `.exe` (not `npm run dev`)
+6. After event: export backups from `%AppData%\gudessence-tradeshow-app\backups\`

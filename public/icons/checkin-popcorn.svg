@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" fill="none" aria-hidden="true">
+  <ellipse cx="70" cy="128" rx="48" ry="7" fill="#000" opacity="0.2"/>
+  <!-- bucket body -->
+  <path d="M32 58c0-22 17-38 38-38s38 16 38 38v52H32V58z" fill="#e8193a" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- stripes -->
+  <path d="M36 58h68v9H36z" fill="#fff"/>
+  <path d="M36 76h68v9H36z" fill="#fff"/>
+  <path d="M36 94h68v9H36z" fill="#fff"/>
+  <!-- POP CORN label -->
+  <rect x="44" y="66" width="52" height="36" rx="3" fill="#1a1a1a"/>
+  <text x="70" y="82" text-anchor="middle" fill="#fff" font-size="11" font-weight="800" font-family="Arial Black,Arial,sans-serif">POP</text>
+  <text x="70" y="96" text-anchor="middle" fill="#fff" font-size="11" font-weight="800" font-family="Arial Black,Arial,sans-serif">CORN</text>
+  <!-- overflowing popcorn -->
+  <ellipse cx="48" cy="32" rx="14" ry="12" fill="#ffe566" stroke="#fff" stroke-width="1.5"/>
+  <ellipse cx="70" cy="22" rx="18" ry="14" fill="#ffd700" stroke="#fff" stroke-width="1.5"/>
+  <ellipse cx="92" cy="32" rx="14" ry="12" fill="#ffe566" stroke="#fff" stroke-width="1.5"/>
+  <ellipse cx="58" cy="42" rx="10" ry="9" fill="#ccff00"/>
+  <ellipse cx="82" cy="40" rx="11" ry="10" fill="#ffe566"/>
+  <ellipse cx="70" cy="38" rx="9" ry="8" fill="#fff8dc"/>
+</svg>

@@ -1,74 +1,130 @@
 /** Poll cloud signup relay and sync pending signups into the local kiosk DB */
 
+import { signupStreamForEventId } from './retreatInterest.js';
+
+function buildSyncStreams(config) {
+  const streams = [
+    { eventId: config.eventId, signupStream: 'booth' },
+  ];
+  const colombiaEventId = config.colombiaEventId;
+  if (colombiaEventId && colombiaEventId !== config.eventId) {
+    streams.push({ eventId: colombiaEventId, signupStream: 'colombia_retreat' });
+  }
+  return streams;
+}
+
 export function createMobileSignupSync(config, handlers, onUpdate) {
   if (!config?.relayApiUrl || !config?.relayApiKey || !config?.eventId) {
     return { start: () => {}, getStatus: () => ({ mode: 'disabled' }) };
   }
 
+  const syncStreams = buildSyncStreams(config);
   let timer = null;
   let lastSyncAt = null;
   let lastError = null;
   let connected = false;
+  let lastErrorLogAt = 0;
+  let consecutiveFailures = 0;
 
   const headers = {
     Authorization: `Bearer ${config.relayApiKey}`,
     'Content-Type': 'application/json',
   };
 
-  const syncOnce = async () => {
+  const relayHealthOk = async () => {
     try {
-      const url = new URL('/api/signup/pending', config.relayApiUrl);
-      url.searchParams.set('eventId', config.eventId);
-      const res = await fetch(url, { headers });
-      if (!res.ok) throw new Error(`Relay responded ${res.status}`);
-      const data = await res.json();
-      connected = true;
-      lastError = null;
-      lastSyncAt = new Date().toISOString();
+      const res = await fetch(`${config.relayApiUrl.replace(/\/$/, '')}/health`, { signal: AbortSignal.timeout(8000) });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
 
-      let changed = 0;
-      for (const remote of data.signups || []) {
-        if (remote.status !== 'pending') continue;
-        const result = handlers.importRemoteSignup(remote);
-        if (result?.imported) changed += 1;
-      }
+  const logSyncError = (message) => {
+    const now = Date.now();
+    if (now - lastErrorLogAt < 30_000) return;
+    lastErrorLogAt = now;
+    const hint = consecutiveFailures >= 3
+      ? ' — relay unreachable; use npm run dev:local for offline dev or check Railway deploy'
+      : '';
+    console.error(`Mobile signup sync failed: ${message}${hint}`);
+  };
 
-      const confirmedUrl = new URL('/api/signup/confirmed-recent', config.relayApiUrl);
-      confirmedUrl.searchParams.set('eventId', config.eventId);
-      const confirmedRes = await fetch(confirmedUrl, { headers });
-      if (confirmedRes.ok) {
-        const confirmedData = await confirmedRes.json();
-        for (const remote of confirmedData.signups || []) {
-          let result = handlers.confirmByRemoteSignupId(
-            remote.signupId,
+  const syncEventStream = async (stream) => {
+    let changed = 0;
+    const { eventId, signupStream } = stream;
+
+    const url = new URL('/api/signup/pending', config.relayApiUrl);
+    url.searchParams.set('eventId', eventId);
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`Relay responded ${res.status} for ${eventId}`);
+    const data = await res.json();
+
+    for (const remote of data.signups || []) {
+      if (remote.status !== 'pending') continue;
+      const result = handlers.importRemoteSignup({
+        ...remote,
+        eventId,
+        signupStream: signupStream || signupStreamForEventId(eventId),
+      });
+      if (result?.imported) changed += 1;
+    }
+
+    const confirmedUrl = new URL('/api/signup/confirmed-recent', config.relayApiUrl);
+    confirmedUrl.searchParams.set('eventId', eventId);
+    const confirmedRes = await fetch(confirmedUrl, { headers });
+    if (confirmedRes.ok) {
+      const confirmedData = await confirmedRes.json();
+      for (const remote of confirmedData.signups || []) {
+        let result = handlers.confirmByRemoteSignupId(
+          remote.signupId,
+          remote.confirmedByStaff || 'Staff',
+          remote.confirmedByKiosk || 'Phone Staff Monitor'
+        );
+        if (!result && handlers.importConfirmedRemoteSignup) {
+          result = handlers.importConfirmedRemoteSignup(
+            { ...remote, eventId, signupStream: signupStream || signupStreamForEventId(eventId) },
             remote.confirmedByStaff || 'Staff',
             remote.confirmedByKiosk || 'Phone Staff Monitor'
           );
-          if (!result && handlers.importConfirmedRemoteSignup) {
-            result = handlers.importConfirmedRemoteSignup(
-              remote,
-              remote.confirmedByStaff || 'Staff',
-              remote.confirmedByKiosk || 'Phone Staff Monitor'
-            );
-          }
-          if (result?.success && !result?.already) changed += 1;
         }
+        if (result?.success && !result?.already) changed += 1;
+      }
+    }
+
+    const deniedUrl = new URL('/api/signup/denied-recent', config.relayApiUrl);
+    deniedUrl.searchParams.set('eventId', eventId);
+    const deniedRes = await fetch(deniedUrl, { headers });
+    if (deniedRes.ok) {
+      const deniedData = await deniedRes.json();
+      for (const remote of deniedData.signups || []) {
+        const result = handlers.importDeclinedRemoteSignup?.(
+          { ...remote, eventId, signupStream: signupStream || signupStreamForEventId(eventId) },
+          remote.deniedByStaff || 'Staff',
+          remote.deniedByKiosk || 'Phone Staff Monitor'
+        );
+        if (result?.imported) changed += 1;
+      }
+    }
+
+    return changed;
+  };
+
+  const syncOnce = async () => {
+    try {
+      if (consecutiveFailures >= 2 && !(await relayHealthOk())) {
+        throw new Error('Relay health check failed — cloud relay offline or redeploying');
       }
 
-      const deniedUrl = new URL('/api/signup/denied-recent', config.relayApiUrl);
-      deniedUrl.searchParams.set('eventId', config.eventId);
-      const deniedRes = await fetch(deniedUrl, { headers });
-      if (deniedRes.ok) {
-        const deniedData = await deniedRes.json();
-        for (const remote of deniedData.signups || []) {
-          const result = handlers.importDeclinedRemoteSignup?.(
-            remote,
-            remote.deniedByStaff || 'Staff',
-            remote.deniedByKiosk || 'Phone Staff Monitor'
-          );
-          if (result?.imported) changed += 1;
-        }
+      let changed = 0;
+      for (const stream of syncStreams) {
+        changed += await syncEventStream(stream);
       }
+
+      connected = true;
+      lastError = null;
+      consecutiveFailures = 0;
+      lastSyncAt = new Date().toISOString();
 
       changed += await syncPendingStatusesFromRelay();
       changed += await pushLocalActionsToRelay();
@@ -76,10 +132,11 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
       onUpdate?.();
     } catch (err) {
       connected = false;
+      consecutiveFailures += 1;
       lastError = err.message?.includes('401')
         ? 'API key mismatch — relayApiKey must match RELAY_API_KEY on relay'
         : err.message;
-      console.error('Mobile signup sync failed:', err.message);
+      logSyncError(lastError);
     }
   };
 
@@ -161,7 +218,7 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
 
   const syncPendingStatusesFromRelay = async () => {
     let updated = 0;
-    const pending = handlers.getPendingMobileSignups() || [];
+    const pending = handlers.getAllPendingMobileSignups?.() || handlers.getPendingMobileSignups() || [];
     for (const local of pending) {
       if (!local.remote_signup_id) continue;
       try {
@@ -196,8 +253,19 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
   return {
     start() {
       if (timer) return;
-      syncOnce();
-      timer = setInterval(syncOnce, config.syncIntervalMs || 2000);
+      (async () => {
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+          if (await relayHealthOk()) break;
+          if (attempt === 5) {
+            lastError = 'Relay not reachable on startup — waiting for cloud relay';
+            logSyncError(lastError);
+          } else {
+            await new Promise((r) => setTimeout(r, 2000 * attempt));
+          }
+        }
+        syncOnce();
+        timer = setInterval(syncOnce, config.syncIntervalMs || 2000);
+      })();
     },
     stop() {
       if (timer) clearInterval(timer);
@@ -212,7 +280,10 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
         lastSyncAt,
         lastError,
         eventId: config.eventId,
+        colombiaEventId: config.colombiaEventId || null,
+        syncStreams: syncStreams.map((s) => s.eventId),
         publicSignupUrl: config.publicSignupUrl,
+        publicColombiaSignupUrl: config.publicColombiaSignupUrl || null,
         relayApiUrl: config.relayApiUrl,
         localDev: Boolean(config.localDev),
         tunnelActive: Boolean(config.tunnelActive),

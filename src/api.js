@@ -1,6 +1,7 @@
 // api.js - Final Multi-File Optimized Logic
 
-import { contactDisplayReference } from './guestReference.js';
+import { contactDisplayReference, getLegacyGuestReference, hasPrehistoricGuestReference } from './guestReference.js';
+import { colombiaRetreatSourceLabel, isColombiaRetreatInterested } from './retreatInterest.js';
 
 const api = {
   // --- Search & Fetch ---
@@ -138,16 +139,46 @@ const api = {
 
   // --- VIP & Perks ---
   async grantVipStatus(contactId, staffName) {
+    const c = await this.getContactById(contactId);
+    if (!c) throw new Error('Contact not found');
+    if (c.is_vip) return { success: true, already: true, contact: c };
+
     await window.electronAPI.jsonRun('Contacts', 'update', { is_vip: true }, { contact_id: contactId });
     await this.addRaffleEntries(contactId, 2, 'VIP Bonus');
     await window.electronAPI.logStaffAction({ type: 'VIP_UPGRADE', staff_name: staffName, contact_id: contactId });
+    const updated = await this.getContactById(contactId);
+    return { success: true, contact: updated };
   },
-  async redeemPopcorn(contactId) {
+
+  /** VIP Lounge registration — check-in/register then auto-grant VIP + booth points + VIP raffle entries */
+  async checkInOrRegisterVip({ firstName, lastName, email, phone, ticketNumbers, staffName = 'VIP Lounge' }) {
+    const result = await this.checkInOrRegister({ firstName, lastName, email, phone, ticketNumbers });
+    const vipResult = await this.grantVipStatus(result.contactId, staffName);
+    const contact = vipResult.contact || (await this.getContactById(result.contactId));
+    return {
+      ...result,
+      contact,
+      vipGranted: !vipResult.already,
+      isVip: Boolean(contact?.is_vip),
+    };
+  },
+  async redeemPopcorn(contactId, staffName = null, dose = null) {
     const c = await this.getContactById(contactId);
+    if (!c) throw new Error('Contact not found');
+    if (!c.is_vip) throw new Error('Guest is not VIP');
     if (c.vip_popcorn_last_redeemed_at) {
-      if ((new Date() - new Date(c.vip_popcorn_last_redeemed_at)) < 600000) throw new Error('Wait 10 mins!');
+      if ((new Date() - new Date(c.vip_popcorn_last_redeemed_at)) < 600000) throw new Error('Wait 10 mins before next refill');
     }
     await window.electronAPI.jsonRun('Contacts', 'update', { vip_popcorn_last_redeemed_at: new Date().toISOString() }, { contact_id: contactId });
+    if (staffName) {
+      const doseLabel = dose === 'high' ? 'high dose' : dose === 'low' ? 'low dose' : null;
+      await window.electronAPI.logStaffAction({
+        type: 'POPCORN_REFILL',
+        staff_name: staffName,
+        contact_id: contactId,
+        item: doseLabel ? `Popcorn (${doseLabel})` : 'Popcorn refill',
+      });
+    }
   },
   async claimFlower(contactId, staffName) {
     await window.electronAPI.jsonRun('Contacts', 'update', { flower_claimed: true }, { contact_id: contactId });
@@ -180,6 +211,21 @@ const api = {
     await this.awardPoints(contactId, actionName);
     await this.addRaffleEntries(contactId, 1, actionName, staffName);
   },
+  async markColombiaRetreatInterest(contactId, source = 'kiosk_early_bird', staffName = 'System') {
+    return await window.electronAPI.markColombiaRetreatInterest(contactId, source, staffName);
+  },
+  isColombiaRetreatInterested(contact) {
+    return isColombiaRetreatInterested(contact);
+  },
+  colombiaRetreatSourceLabel(source) {
+    return colombiaRetreatSourceLabel(source);
+  },
+  async getColombiaRetreatSignupUrl() {
+    return await window.electronAPI.getColombiaRetreatSignupUrl();
+  },
+  async getPendingColombiaSignups() {
+    return await window.electronAPI.getPendingMobileSignups('colombia_retreat');
+  },
   async toggleVipWithLog(id, currentStatus, staffName) {
     if (!currentStatus) await this.grantVipStatus(id, staffName);
     else {
@@ -201,6 +247,12 @@ const api = {
   },
   async wipeAllData() {
     return await window.electronAPI.wipeAllData();
+  },
+  async isDevMode() {
+    return await window.electronAPI.isDevMode();
+  },
+  async clearDevTestData(staffName, pin) {
+    return await window.electronAPI.clearDevTestData(staffName, pin);
   },
   async getVote(contactId) {
     return await window.electronAPI.jsonGet('Votes', { contact_id: contactId });
@@ -238,6 +290,9 @@ const api = {
   async getPendingMobileSignups() {
     return await window.electronAPI.getPendingMobileSignups();
   },
+  async getAllPendingMobileSignups() {
+    return await window.electronAPI.getAllPendingMobileSignups();
+  },
   async confirmMobileSignup(contactId, staffName = 'Staff') {
     return await window.electronAPI.confirmMobileSignup(contactId, staffName);
   },
@@ -246,6 +301,12 @@ const api = {
   },
   contactReference(contact) {
     return contactDisplayReference(contact);
+  },
+  isPrehistoricGuestReference(contact) {
+    return hasPrehistoricGuestReference(contact);
+  },
+  legacyGuestReference(contact) {
+    return getLegacyGuestReference(contact);
   },
   async ensureContactReference(contactId) {
     return await window.electronAPI.ensureGuestReference(contactId);
@@ -290,15 +351,18 @@ const api = {
   },
   async castVote(contactId, seasoningName) {
     const existing = await window.electronAPI.jsonGet('Votes', { contact_id: contactId });
-    if (existing) throw new Error('Already Voted!');
-    
-    await window.electronAPI.jsonRun('Votes', 'insert', { 
-      contact_id: contactId, 
-      seasoning_name: seasoningName, 
-      timestamp: new Date().toISOString() 
-    }, null, { contact_id: contactId }); // Ensure only one vote per contact
-    
+    if (existing) throw new Error(`Already voted for ${existing.seasoning_name}. One vote per guest.`);
+
+    await window.electronAPI.jsonRun('Votes', 'insert', {
+      contact_id: contactId,
+      seasoning_name: seasoningName,
+      timestamp: new Date().toISOString(),
+    }, null, { contact_id: contactId });
+
     await this.awardPoints(contactId, 'Seasoning Vote');
+  },
+  async hasVoted(contactId) {
+    return Boolean(await window.electronAPI.jsonGet('Votes', { contact_id: contactId }));
   },
   formatCivilianTime(isoString) {
     if (!isoString) return 'Never';

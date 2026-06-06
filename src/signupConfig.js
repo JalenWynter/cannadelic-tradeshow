@@ -1,6 +1,9 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import {
+  defaultColombiaEventId,
+} from './retreatInterest.js';
 
 const CONFIG_FILENAME = 'signup-sync.json';
 
@@ -65,6 +68,7 @@ export function resolveSignupConfigPaths(projectRoot, userDataPath) {
   return {
     user: path.join(userDataPath, CONFIG_FILENAME),
     project: path.join(projectRoot, 'config', CONFIG_FILENAME),
+    show: path.join(projectRoot, 'config', 'signup-sync.show.json'),
     dev: path.join(projectRoot, 'config', 'signup-sync.dev.json'),
     example: path.join(projectRoot, 'config', 'signup-sync.example.json'),
   };
@@ -75,14 +79,14 @@ export function ensureSignupConfig(projectRoot, userDataPath) {
   const paths = resolveSignupConfigPaths(projectRoot, userDataPath);
   if (fs.existsSync(paths.user) || fs.existsSync(paths.project)) return null;
 
-  const seedSource = [paths.dev, paths.example].find((p) => fs.existsSync(p));
+  const seedSource = [paths.show, paths.example].find((p) => fs.existsSync(p));
   if (!seedSource) return null;
 
   try {
     fs.mkdirSync(userDataPath, { recursive: true });
     fs.copyFileSync(seedSource, paths.user);
-    const label = seedSource.endsWith('signup-sync.dev.json') ? 'dev relay defaults' : 'example template';
-    console.warn(`Created signup-sync.json at ${paths.user} (${label}) — edit relayApiUrl for production HTTPS.`);
+    const label = seedSource.endsWith('signup-sync.show.json') ? 'bundled show config' : 'example template';
+    console.log(`Created signup-sync.json at ${paths.user} (${label})`);
     return paths.user;
   } catch (err) {
     console.error('Failed to seed signup-sync.json:', err.message);
@@ -90,12 +94,23 @@ export function ensureSignupConfig(projectRoot, userDataPath) {
   }
 }
 
+/** Env override for dev: `SIGNUP_SYNC_CONFIG=config/signup-sync.dev.json` */
+function resolveConfigOverridePath(projectRoot) {
+  const raw = process.env.SIGNUP_SYNC_CONFIG?.trim();
+  if (!raw) return null;
+  return path.isAbsolute(raw) ? raw : path.join(projectRoot, raw);
+}
+
 export function loadSignupConfig(projectRoot, userDataPath) {
   ensureSignupConfig(projectRoot, userDataPath);
   const paths = resolveSignupConfigPaths(projectRoot, userDataPath);
+  const overridePath = resolveConfigOverridePath(projectRoot);
 
   let config = null;
-  for (const configPath of [paths.user, paths.project]) {
+  const configCandidates = overridePath
+    ? [overridePath]
+    : [paths.user, paths.project, paths.show];
+  for (const configPath of configCandidates) {
     try {
       if (!fs.existsSync(configPath)) continue;
       const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -132,10 +147,15 @@ export function loadSignupConfig(projectRoot, userDataPath) {
 export function resolveSignupUrls(config) {
   if (!config?.relayApiUrl || !config?.eventId) return null;
 
+  const colombiaEventId = config.colombiaEventId || defaultColombiaEventId(config.eventId);
+
   if (config.tunnelActive && config.publicSignupUrl) {
     return {
       publicSignupUrl: config.publicSignupUrl,
       publicStaffUrl: config.publicStaffUrl,
+      colombiaEventId,
+      publicColombiaSignupUrl: config.publicColombiaSignupUrl || null,
+      publicColombiaStaffUrl: config.publicColombiaStaffUrl || null,
       localDev: false,
       tunnelActive: true,
       tunnelProvider: config.tunnelProvider || 'tunnel',
@@ -147,6 +167,7 @@ export function resolveSignupUrls(config) {
   const publicBase = publicRelayBase(config.relayApiUrl);
   const localDev = isLocalRelayHost(config.relayApiUrl);
   const productionCloud = isProductionCloudConfig(config);
+  const colombiaTitle = encodeURIComponent('Colombia Retreat Early Bird');
   return {
     publicSignupUrl: rewriteLocalhostUrl(
       config.publicSignupUrl ||
@@ -154,7 +175,17 @@ export function resolveSignupUrls(config) {
       publicBase
     ),
     publicStaffUrl: rewriteLocalhostUrl(
-      config.publicStaffUrl || `${publicBase}/staff/${config.eventId}`,
+      config.publicStaffUrl || `${publicBase}/staff/all`,
+      publicBase
+    ),
+    colombiaEventId,
+    publicColombiaSignupUrl: rewriteLocalhostUrl(
+      config.publicColombiaSignupUrl ||
+        `${publicBase}/signup/${colombiaEventId}?title=${colombiaTitle}`,
+      publicBase
+    ),
+    publicColombiaStaffUrl: rewriteLocalhostUrl(
+      config.publicColombiaStaffUrl || `${publicBase}/staff/all`,
       publicBase
     ),
     localDev,

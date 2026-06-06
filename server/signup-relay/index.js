@@ -80,12 +80,21 @@ app.get('/staff/:eventId', (req, res) => {
   res.type('html').send(staffMonitorPageHtml(req.params.eventId));
 });
 
+app.get('/staff/all', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.type('html').send(staffMonitorPageHtml(['booth', 'colombia-retreat']));
+});
+
 app.get('/api/signup/all/public', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  const { eventId } = req.query;
-  if (!eventId) return res.status(400).json({ error: 'eventId required' });
-  const signups = readSignups()
-    .filter((s) => s.eventId === eventId)
+  const eventIds = req.query.eventId
+    ? String(req.query.eventId).split(',').map((e) => e.trim())
+    : null;
+  const allSignups = readSignups();
+  const filtered = eventIds
+    ? allSignups.filter((s) => eventIds.includes(s.eventId))
+    : allSignups;
+  const signups = filtered
     .sort((a, b) => {
       const aTime = a.status === 'confirmed' && a.confirmedAt ? a.confirmedAt : a.createdAt;
       const bTime = b.status === 'confirmed' && b.confirmedAt ? b.confirmedAt : b.createdAt;

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import zlib from 'zlib';
 import { createMobileSignupHandlers } from './mobileSignup.js';
+import { reconcileAllGuestReferences } from './guestReference.js';
 import { loadSignupConfig, isCloudSignupEnabled, resolveSignupUrls, isProductionCloudConfig } from './signupConfig.js';
 import { createMobileSignupSync } from './mobileSignupSync.js';
 
@@ -11,14 +12,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const userDataPath = app.getPath('userData');
+const projectRoot = path.join(__dirname, '..');
 
-// --- Staff roster (PINs live only on disk / main process) ---
+// Prevent two kiosk instances fighting over the same DB files
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
 let staffRoster = [];
 
 function getStaffRosterPaths() {
   const projectRoot = path.join(__dirname, '..');
   return {
     user: path.join(userDataPath, 'staff.roster.json'),
+    show: path.join(projectRoot, 'config', 'staff.roster.show.json'),
     bundled: path.join(projectRoot, 'config', 'staff.roster.example.json'),
     localOverride: path.join(projectRoot, 'config', 'staff.roster.json'),
   };
@@ -32,20 +39,21 @@ function parseStaffRosterFile(filePath) {
 }
 
 function loadStaffRoster() {
-  const { user: userPath, bundled: bundledPath, localOverride: overridePath } = getStaffRosterPaths();
+  const { user: userPath, show: showPath, bundled: bundledPath, localOverride: overridePath } = getStaffRosterPaths();
   try {
-    const sourcePath = [overridePath, bundledPath].find((p) => fs.existsSync(p));
+    if (fs.existsSync(userPath)) {
+      staffRoster = parseStaffRosterFile(userPath);
+      if (staffRoster) return;
+    }
+    const sourcePath = [overridePath, showPath, bundledPath].find((p) => fs.existsSync(p));
     if (sourcePath) {
       staffRoster = parseStaffRosterFile(sourcePath);
       if (staffRoster) {
         fs.mkdirSync(userDataPath, { recursive: true });
         fs.writeFileSync(userPath, `${JSON.stringify(staffRoster, null, 2)}\n`);
+        console.log(`Staff roster loaded from ${path.basename(sourcePath)} → ${userPath}`);
         return;
       }
-    }
-    if (fs.existsSync(userPath)) {
-      staffRoster = parseStaffRosterFile(userPath);
-      if (staffRoster) return;
     }
   } catch (err) {
     console.error('Failed to load staff roster:', err.message);
@@ -64,7 +72,6 @@ let mobileSignupHandlers = null;
 let mobileSignupSync = null;
 let signupConfig = null;
 let signupUrls = null;
-const projectRoot = path.join(__dirname, '..');
 
 // --- Multi-File DB Mapping ---
 const DB_MAP = {
@@ -173,6 +180,51 @@ function initDB() {
   // Ensure all collections exist in memory
   Object.keys(DB_MAP).forEach(c => { if (!IN_MEMORY_DB[c]) IN_MEMORY_DB[c] = []; });
   if (!IN_MEMORY_DB.StaffLogs) IN_MEMORY_DB.StaffLogs = [];
+
+  const repairedRefs = reconcileAllGuestReferences({ IN_MEMORY_DB, persistToDisk });
+  if (repairedRefs > 0) {
+    console.log(`Guest references reconciled: ${repairedRefs} contact(s) labeled or reassigned`);
+  }
+}
+
+function loadBundledSeedIntoMemory() {
+  Object.keys(DB_MAP).forEach((collection) => {
+    IN_MEMORY_DB[collection] = [];
+  });
+  IN_MEMORY_DB.StaffLogs = [];
+
+  const bundledFiles = ['DB_Attendees.json', 'DB_Settings.json', 'DB_Engagement.json', 'StaffLogs.json'];
+  for (const fileName of bundledFiles) {
+    const filePath = path.join(__dirname, fileName);
+    if (!fs.existsSync(filePath)) continue;
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      if (!content.trim()) continue;
+      const data = JSON.parse(content);
+      if (Array.isArray(data)) {
+        mergeData('StaffLogs', data);
+      } else {
+        Object.keys(data).forEach((collection) => mergeData(collection, data[collection]));
+      }
+    } catch (err) {
+      console.error(`Bundled seed load failed at ${filePath}:`, err.message);
+    }
+  }
+
+  Object.keys(DB_MAP).forEach((c) => {
+    if (!IN_MEMORY_DB[c]) IN_MEMORY_DB[c] = [];
+  });
+  if (!IN_MEMORY_DB.StaffLogs) IN_MEMORY_DB.StaffLogs = [];
+}
+
+async function resetDevTestDataToBundledSeed() {
+  loadBundledSeedIntoMemory();
+  await Promise.all([
+    persistToDisk('Contacts'),
+    persistToDisk('Actions'),
+    persistToDisk('UserActions'),
+    persistToDisk('StaffLogs'),
+  ]);
 }
 
 // --- Write Queue & Atomic Write Helpers ---
@@ -206,6 +258,14 @@ async function persistToDisk(collection) {
     });
   });
   return writeQueue;
+}
+
+async function flushPendingWrites() {
+  try {
+    await writeQueue;
+  } catch (err) {
+    console.error('Flush pending writes failed:', err.message);
+  }
 }
 
 // --- Automated Backup System (Every 10 Minutes with Compression & Deletion) ---
@@ -276,7 +336,7 @@ ipcMain.handle('get-kiosk-id', (event) => {
   return getKioskId(event.sender);
 });
 
-ipcMain.handle('get-staff-names', () => staffRoster.map((s) => s.name));
+ipcMain.handle('get-staff-names', () => (Array.isArray(staffRoster) ? staffRoster : []).map((s) => s.name));
 
 ipcMain.handle('validate-staff-pin', (event, { name, pin }) => {
   return validateStaffPin(name, pin);
@@ -436,6 +496,30 @@ ipcMain.handle('get-backup-size', async () => {
   return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
 });
 
+ipcMain.handle('is-dev-mode', () => !app.isPackaged);
+
+ipcMain.handle('clear-dev-test-data', async (event, { staffName, pin }) => {
+  if (app.isPackaged) {
+    throw new Error('Clear test data is only available during npm run dev');
+  }
+  if (!validateStaffPin(staffName, pin)) {
+    throw new Error('Invalid staff PIN');
+  }
+
+  await resetDevTestDataToBundledSeed();
+
+  IN_MEMORY_DB.StaffLogs.push({
+    type: 'DEV_TEST_DATA_CLEAR',
+    staff_name: staffName,
+    timestamp: new Date().toISOString(),
+    source_kiosk: getKioskId(event.sender),
+  });
+  await persistToDisk('StaffLogs');
+  broadcastMobileSignupUpdate();
+
+  return { success: true };
+});
+
 ipcMain.handle('wipe-all-data', async (event) => {
   const kioskId = getKioskId(event.sender);
   IN_MEMORY_DB.Contacts = [];
@@ -477,7 +561,13 @@ function initMobileSignup() {
 
   if (isCloudSignupEnabled(signupConfig) && !mobileSignupSync) {
     mobileSignupSync = createMobileSignupSync(
-      { ...signupConfig, ...signupUrls, publicSignupUrl: signupUrls.publicSignupUrl },
+      {
+        ...signupConfig,
+        ...signupUrls,
+        colombiaEventId: signupUrls.colombiaEventId,
+        publicSignupUrl: signupUrls.publicSignupUrl,
+        publicColombiaSignupUrl: signupUrls.publicColombiaSignupUrl,
+      },
       mobileSignupHandlers,
       () => {
         broadcastMobileSignupUpdate();
@@ -485,6 +575,7 @@ function initMobileSignup() {
     );
     mobileSignupSync.start();
     console.log(`HTTPS mobile signup: ${signupUrls.publicSignupUrl}`);
+    console.log(`HTTPS Colombia retreat signup: ${signupUrls.publicColombiaSignupUrl}`);
     console.log(`HTTPS staff monitor: ${signupUrls.publicStaffUrl}`);
     if (signupUrls.localDev) {
       console.log(`DEV: Phone QR requires same Wi‑Fi — not LTE or offline (${signupUrls.phoneNetworkHint})`);
@@ -498,7 +589,7 @@ function initMobileSignup() {
     return;
   }
 
-  console.warn('Cloud signup not configured — copy config/signup-sync.example.json to signup-sync.json with your HTTPS relay.');
+  console.warn('Cloud signup not configured — bundled config/signup-sync.show.json should load automatically on show PCs.');
 }
 
 function openCloudPagesOnLaunch() {
@@ -512,6 +603,11 @@ function openCloudPagesOnLaunch() {
 ipcMain.handle('get-mobile-signup-url', () => {
   if (!mobileSignupHandlers) initMobileSignup();
   return signupUrls?.publicSignupUrl || null;
+});
+
+ipcMain.handle('get-colombia-retreat-signup-url', () => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  return signupUrls?.publicColombiaSignupUrl || null;
 });
 
 ipcMain.handle('get-cloud-staff-url', () => {
@@ -532,6 +628,8 @@ ipcMain.handle('get-mobile-signup-status', () => {
       ...mobileSignupSync.getStatus(),
       publicStaffUrl: signupUrls?.publicStaffUrl || null,
       publicSignupUrl: signupUrls?.publicSignupUrl || null,
+      publicColombiaSignupUrl: signupUrls?.publicColombiaSignupUrl || null,
+      publicColombiaStaffUrl: signupUrls?.publicColombiaStaffUrl || null,
       localDev: signupUrls?.localDev || false,
       tunnelActive: signupUrls?.tunnelActive || false,
       tunnelProvider: signupUrls?.tunnelProvider || null,
@@ -559,9 +657,23 @@ ipcMain.handle('ensure-guest-reference', (contactId) => {
   return contact;
 });
 
-ipcMain.handle('get-pending-mobile-signups', () => {
+ipcMain.handle('get-pending-mobile-signups', (_event, { stream } = {}) => {
   if (!mobileSignupHandlers) initMobileSignup();
-  return mobileSignupHandlers.getPendingMobileSignups();
+  return mobileSignupHandlers.getPendingMobileSignups({ stream: stream || 'booth' });
+});
+
+ipcMain.handle('get-all-pending-mobile-signups', () => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  return mobileSignupHandlers.getAllPendingMobileSignups();
+});
+
+ipcMain.handle('mark-colombia-retreat-interest', (_event, { contactId, source, staffName }) => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  return mobileSignupHandlers.markColombiaRetreatInterest(
+    contactId,
+    source || 'kiosk_early_bird',
+    staffName || 'System'
+  );
 });
 
 ipcMain.handle('confirm-mobile-signup', async (event, { contactId, staffName }) => {
@@ -587,6 +699,9 @@ ipcMain.handle('deny-mobile-signup', async (event, { contactId, staffName }) => 
 });
 
 function createWindows() {
+  if (app.isPackaged) {
+    console.log(`Production kiosk — userData: ${userDataPath}`);
+  }
   loadStaffRoster();
   initDB(); // Load cache before windows open
   initMobileSignup();
@@ -600,15 +715,17 @@ function createWindows() {
 
   const displays = screen.getAllDisplays();
 
+  const kioskMode = app.isPackaged || process.env.KIOSK_MODE === '1';
+
   displays.forEach((display) => {
     const win = new BrowserWindow({
       x: display.bounds.x,
       y: display.bounds.y,
       width: display.bounds.width,
       height: display.bounds.height,
-      fullscreen: process.env.NODE_ENV === 'production',
-      kiosk: process.env.NODE_ENV === 'production',
-      alwaysOnTop: process.env.NODE_ENV === 'production',
+      fullscreen: kioskMode,
+      kiosk: kioskMode,
+      alwaysOnTop: kioskMode,
       webPreferences: { 
         preload: path.join(__dirname, '../preload.js'), 
         contextIsolation: true, 
@@ -624,8 +741,9 @@ function createWindows() {
       win.webContents.setVisualZoomLevelLimits(1, 1);
     });
 
-    if (process.env.NODE_ENV === 'development') {
-      win.loadURL('http://localhost:5173');
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
+    if (!app.isPackaged) {
+      win.loadURL(devServerUrl);
     } else {
       win.loadFile(path.join(__dirname, '../index.html'));
     }
@@ -648,4 +766,24 @@ ipcMain.on('open-external', (event, url) => {
 });
 
 app.whenReady().then(createWindows);
+
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.show();
+        win.focus();
+      }
+    }
+  });
+}
+
+let isFlushingOnQuit = false;
+app.on('before-quit', (event) => {
+  if (isFlushingOnQuit) return;
+  event.preventDefault();
+  isFlushingOnQuit = true;
+  flushPendingWrites().finally(() => app.exit(0));
+});
+
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

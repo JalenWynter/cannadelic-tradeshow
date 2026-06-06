@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'show/**']
+  pull_request:
+    branches: [main, 'show/**']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install relay dependencies
+        run: npm ci
+        working-directory: server/signup-relay
+
+      - name: Unit tests
+        run: |
+          node scripts/test-mobile-signup-unit.mjs
+          node scripts/test-guest-reference-unit.mjs
+
+      - name: Build kiosk app
+        run: npm run build
+
+      - name: Relay integration tests
+        run: |
+          chmod +x scripts/test-signup-relay.sh
+          ./scripts/test-signup-relay.sh
