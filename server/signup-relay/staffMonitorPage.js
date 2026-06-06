@@ -450,10 +450,9 @@ function updateStats(data){
 async function load(){
   try{
     let url='/api/signup/all/public';
-    if(IS_MULTI){
+    // Always load ALL signups — both booth and Colombia funnels unified into one queue
+    if(EVENT_IDS.length>0){
       url+='?eventId='+EVENT_IDS.map(encodeURIComponent).join(',');
-    } else if(PRIMARY_EVENT_ID) {
-      url+='?eventId='+encodeURIComponent(PRIMARY_EVENT_ID);
     }
     const res=await fetch(url,{cache:'no-store'});
     const data=await res.json();
