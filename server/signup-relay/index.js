@@ -92,7 +92,9 @@ app.get('/api/signup/all/public', (req, res) => {
     : null;
   const allSignups = readSignups();
   const filtered = eventIds
-    ? allSignups.filter((s) => eventIds.includes(s.eventId))
+    ? allSignups.filter((s) =>
+        eventIds.some((id) => String(s.eventId || '').includes(id))
+      )
     : allSignups;
   const signups = filtered
     .sort((a, b) => {

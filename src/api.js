@@ -143,7 +143,7 @@ const api = {
     if (!c) throw new Error('Contact not found');
     if (c.is_vip) return { success: true, already: true, contact: c };
 
-    await window.electronAPI.jsonRun('Contacts', 'update', { is_vip: true }, { contact_id: contactId });
+    await window.electronAPI.jsonRun('Contacts', 'update', { is_vip: true, vip_popcorn_count: 0 }, { contact_id: contactId });
     await this.addRaffleEntries(contactId, 2, 'VIP Bonus');
     await window.electronAPI.logStaffAction({ type: 'VIP_UPGRADE', staff_name: staffName, contact_id: contactId });
     const updated = await this.getContactById(contactId);
@@ -169,7 +169,10 @@ const api = {
     if (c.vip_popcorn_last_redeemed_at) {
       if ((new Date() - new Date(c.vip_popcorn_last_redeemed_at)) < 600000) throw new Error('Wait 10 mins before next refill');
     }
-    await window.electronAPI.jsonRun('Contacts', 'update', { vip_popcorn_last_redeemed_at: new Date().toISOString() }, { contact_id: contactId });
+    await window.electronAPI.jsonRun('Contacts', 'update', {
+      vip_popcorn_last_redeemed_at: new Date().toISOString(),
+      vip_popcorn_count: (c.vip_popcorn_count || 0) + 1,
+    }, { contact_id: contactId });
     if (staffName) {
       const doseLabel = dose === 'high' ? 'high dose' : dose === 'low' ? 'low dose' : null;
       await window.electronAPI.logStaffAction({

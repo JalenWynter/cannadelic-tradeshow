@@ -376,6 +376,13 @@ input:focus {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(15px);
   animation: keyboardPopIn 0.2s ease-out;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.keyboard-overlay:active {
+  cursor: grabbing;
 }
 
 .keyboard-overlay--placed {
@@ -409,14 +416,7 @@ input:focus {
   color: var(--neon-lime);
   font-weight: bold;
   font-size: 0.85rem;
-  cursor: grab;
   user-select: none;
-  touch-action: none;
-}
-
-.keyboard-drag-handle:active {
-  cursor: grabbing;
-  background: rgba(204, 255, 0, 0.12);
 }
 
 .keyboard-drag-grip {

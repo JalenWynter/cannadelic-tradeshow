@@ -295,16 +295,14 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
       ref={keyboardRef}
       className={`keyboard-overlay${position ? ' keyboard-overlay--placed' : ''}${positionReady ? '' : ' keyboard-overlay--pending'}`}
       style={position ? { left: position.x, top: position.y } : undefined}
+      onPointerDown={handleDragStart}
+      onPointerMove={handleDragMove}
+      onPointerUp={handleDragEnd}
+      onPointerCancel={handleDragEnd}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="keyboard-header">
-        <div
-          className="keyboard-drag-handle"
-          onPointerDown={handleDragStart}
-          onPointerMove={handleDragMove}
-          onPointerUp={handleDragEnd}
-          onPointerCancel={handleDragEnd}
-        >
+        <div className="keyboard-drag-handle" style={{ cursor: 'grab' }}>
           <span className="keyboard-drag-grip" aria-hidden="true">⋮⋮</span>
           <span className="keyboard-drag-label">
             {layout === 'numeric' ? 'NUMERIC PAD (DRAG TO MOVE)' : 'TOUCH KEYBOARD (DRAG TO MOVE)'}
@@ -511,10 +509,10 @@ const StaffApprovalModal = ({ isOpen, onClose, onApprove, actionName, onFocusInp
 
 const usePopcornCooldown = (lastRedeemed) => {
   const [ready, setReady] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(null);
+    const [timeLeft, setTimeLeft] = useState(null);
 
-  useEffect(() => {
-    const update = () => {
+    useEffect(() => {
+        const update = () => {
       if (!lastRedeemed) {
         setReady(true);
         setTimeLeft(null);
@@ -526,15 +524,15 @@ const usePopcornCooldown = (lastRedeemed) => {
         setTimeLeft('0:00');
       } else {
         setReady(false);
-        const mins = Math.floor(diff / 60000);
-        const secs = Math.floor((diff % 60000) / 1000);
-        setTimeLeft(`${mins}:${secs.toString().padStart(2, '0')}`);
-      }
-    };
-    update();
-    const i = setInterval(update, 1000);
-    return () => clearInterval(i);
-  }, [lastRedeemed]);
+                const mins = Math.floor(diff / 60000);
+                const secs = Math.floor((diff % 60000) / 1000);
+                setTimeLeft(`${mins}:${secs.toString().padStart(2, '0')}`);
+            }
+        };
+        update();
+        const i = setInterval(update, 1000);
+        return () => clearInterval(i);
+    }, [lastRedeemed]);
 
   return { ready, timeLeft };
 };
@@ -542,11 +540,11 @@ const usePopcornCooldown = (lastRedeemed) => {
 const RefillCountdown = ({ lastRedeemed }) => {
   const { ready, timeLeft } = usePopcornCooldown(lastRedeemed);
   if (ready) return <p className="neon-text-lime" style={{ fontWeight: 'bold', margin: 0 }}>REFILL READY!</p>;
-  return (
-    <div>
+    return (
+        <div>
       <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: '0 0 4px' }}>Next refill in</p>
       <p className="neon-text-pink" style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: 0 }}>{timeLeft}</p>
-    </div>
+        </div>
   );
 };
 
@@ -719,7 +717,7 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
         <h2 className="neon-text-violet home-header__event home-header__event--pulse">Cannadelic Night Market</h2>
         <p className="home-header__url">gudessence.com</p>
       </header>
-
+      
       <div className="home-greeting home-greeting--fade">
         {currentContactName ? (
           <div className="neon-text-lime home-greeting__welcome">Welcome, {currentContactName}!</div>
@@ -735,7 +733,7 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
 
       <div className="home-menu">
         {/* 1. Check-in / profile (primary) */}
-        {currentContactId ? (
+          {currentContactId ? (
           <HomeMenuCard
             variant="profile"
             iconSrc="/icons/profile-user.svg"
@@ -805,12 +803,12 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
             <span className="home-retreat-savings">Save $500!</span>
             <span className="home-retreat-tag">All-inclusive luxury wellness retreat</span>
           </span>
-          {currentContactId && (
+              {currentContactId && (
             <span className="home-retreat-extra">
-              {hasRetreat ? (
+                  {hasRetreat ? (
                 <span className="home-retreat-badge">✅ ON THE LIST</span>
-              ) : (
-                <button
+                  ) : (
+                    <button 
                   type="button"
                   className="btn btn-lime home-retreat-cta"
                   data-retreat-nested
@@ -818,11 +816,11 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
                     e.stopPropagation();
                     handleQuickRetreat(e);
                   }}
-                  disabled={loading}
-                >
-                  {loading ? '...' : 'ONE-TAP SIGN UP'}
-                </button>
-              )}
+                      disabled={loading}
+                    >
+                      {loading ? '...' : 'ONE-TAP SIGN UP'}
+                    </button>
+                  )}
             </span>
           )}
         </HomeRetreatCard>
@@ -836,12 +834,12 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
           textAlign="center"
           attentionIndex={6}
         />
-      </div>
+            </div>
 
       <footer style={{ marginTop: '48px', paddingBottom: '20px', textAlign: 'center' }}>
         <button style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.1)' }} onClick={() => go('staff-login')}>Staff Portal</button>
       </footer>
-    </div>
+            </div>
   );
 };
 
@@ -849,7 +847,7 @@ const MenuRaffleBanner = ({ accent = 'var(--neon-lime)' }) => (
   <div className="menu-raffle-banner" style={{ '--banner-accent': accent }} role="note">
     <span className="menu-raffle-banner__icon" aria-hidden="true">🎟️</span>
     <span className="menu-raffle-banner__title">Every purchase includes 1 raffle entry</span>
-  </div>
+            </div>
 );
 
 const MenuItemRaffleBadge = () => (
@@ -867,12 +865,12 @@ const MainMenu = ({ onNavigate }) => (
         onClick={() => { playSound('click'); onNavigate('menu-infused'); }}
       >
         <div className="menu-picker-card__body">
-          <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🍿</div>
-          <h3 className="neon-text-lime" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Infused Popcorn</h3>
-          <div style={{ height: '2px', width: '60px', background: 'var(--neon-lime)', marginBottom: '20px' }}></div>
+        <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🍿</div>
+        <h3 className="neon-text-lime" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Infused Popcorn</h3>
+        <div style={{ height: '2px', width: '60px', background: 'var(--neon-lime)', marginBottom: '20px' }}></div>
           <p style={{ margin: '0 0 16px 0', opacity: 0.8, fontSize: '1.1rem', lineHeight: '1.5' }}>
-            Explore our signature flavors, seasoning kits, and VIP experiences.
-          </p>
+          Explore our signature flavors, seasoning kits, and VIP experiences.
+        </p>
           <span className="menu-raffle-inline">🎟️ +1 raffle entry per item</span>
         </div>
         <button type="button" className="btn btn-lime menu-picker-card__action">View Flavors</button>
@@ -883,12 +881,12 @@ const MainMenu = ({ onNavigate }) => (
         onClick={() => { playSound('click'); onNavigate('menu-products'); }}
       >
         <div className="menu-picker-card__body">
-          <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🛍️</div>
-          <h3 className="neon-text-violet" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Merchandise</h3>
-          <div style={{ height: '2px', width: '60px', background: 'var(--electric-violet)', marginBottom: '20px' }}></div>
+        <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🛍️</div>
+        <h3 className="neon-text-violet" style={{ fontSize: '2.2rem', marginBottom: '15px' }}>Merchandise</h3>
+        <div style={{ height: '2px', width: '60px', background: 'var(--electric-violet)', marginBottom: '20px' }}></div>
           <p style={{ margin: '0 0 16px 0', opacity: 0.8, fontSize: '1.1rem', lineHeight: '1.5' }}>
-            Premium flower selections, signature apparel, and wellness products.
-          </p>
+          Premium flower selections, signature apparel, and wellness products.
+        </p>
           <span className="menu-raffle-inline">🎟️ +1 raffle entry per item</span>
         </div>
         <button type="button" className="btn btn-violet menu-picker-card__action">View Shop</button>
@@ -1322,21 +1320,21 @@ const MobileSignupPanel = ({
             </p>
           </>
         ) : (
-          <div style={{
-            background: 'white',
-            padding: '16px',
-            borderRadius: '16px',
-            display: 'inline-block',
-            marginBottom: '12px',
-            boxShadow: '0 0 30px rgba(204,255,0,0.25)',
-          }}>
-            <QRCodeCanvas value={signupUrl} size={180} level="M" includeMargin />
+        <div style={{
+          background: 'white',
+          padding: '16px',
+          borderRadius: '16px',
+          display: 'inline-block',
+          marginBottom: '12px',
+          boxShadow: '0 0 30px rgba(204,255,0,0.25)',
+        }}>
+          <QRCodeCanvas value={signupUrl} size={180} level="M" includeMargin />
             {stream === 'colombia_retreat' ? (
               <p style={{ color: '#111', fontSize: '0.75rem', margin: '10px 0 0', maxWidth: '180px' }}>
                 Scan to join the Colombia retreat waitlist from your phone
               </p>
             ) : null}
-          </div>
+        </div>
         )
       )}
 
@@ -1681,9 +1679,9 @@ const Profile = ({ contactId, onNavigate }) => {
       <div style={{ maxWidth: '800px', margin: '0 auto' }}>
         <div className="card" style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h2 className="neon-text-lime" style={{ fontSize: '2.5rem' }}>{contact.name}</h2>
-            <p style={{ opacity: 0.7 }}>
+          <p style={{ opacity: 0.7 }}>
               Reference: <GuestReferenceDisplay contact={contact} monospace />
-            </p>
+          </p>
             {api.isPrehistoricGuestReference(contact) && api.legacyGuestReference(contact) ? (
               <p style={{ opacity: 0.5, fontSize: '0.8rem', marginTop: '-8px' }}>
                 Prehistoric ID preserved: {api.legacyGuestReference(contact)}
@@ -2319,7 +2317,7 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
         onFocusInput={onFocusInput}
         onClose={handleCloseAccountGate}
       />
-
+      
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         <h2 className="neon-text-violet" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '2rem' }}>Raffle Hub</h2>
         <p style={{ textAlign: 'center', opacity: 0.65, marginBottom: '28px' }}>
@@ -2334,13 +2332,13 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
                 <h2 className="neon-text-lime" style={{ margin: '4px 0 0', fontSize: '1.5rem' }}>{activeContact.name}</h2>
                 {api.contactReference(activeContact) && (
                   <p style={{ margin: '4px 0 0', opacity: 0.6, fontSize: '0.85rem' }}>ID: {api.contactReference(activeContact)}</p>
-                )}
-              </div>
+          )}
+        </div>
               <div style={{ textAlign: 'right' }}>
                 <div className="neon-text-violet" style={{ fontSize: '1.75rem', fontWeight: 'bold', lineHeight: 1 }}>{entries}</div>
                 <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>raffle entries</div>
-              </div>
-            </div>
+                        </div>
+                        </div>
             <PointsProgressBar points={activeContact.total_points || 0} />
             {!contactId && (
               <button
@@ -2352,8 +2350,8 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
                 Switch account
               </button>
             )}
-          </div>
-        )}
+                        </div>
+                      )}
 
         <VipExperienceSection />
 
@@ -2368,17 +2366,17 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
 
         <div style={{ textAlign: 'center', marginTop: '32px' }}>
           <button type="button" className="btn btn-lime" onClick={() => { playSound('click'); onNavigate('home'); }}>Done</button>
-        </div>
+                  </div>
       </div>
     </div>
   );
 };
 
-const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames }) => {
+const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, currentContactId }) => {
   const { search, searchResults, handleSearch, clearSearch } = useContactSearch();
   const [status, setStatus] = useState(null);
-  const [approvalTarget, setApprovalTarget] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [popcornExpanded, setPopcornExpanded] = useState(false);
 
   const loadStatus = async (id) => {
     const contact = await api.getContactById(id);
@@ -2390,25 +2388,26 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames 
       points: contact.total_points || 0,
       lastRedeemed: contact.vip_popcorn_last_redeemed_at,
       flowerClaimed: !!contact.flower_claimed,
+      popcornCount: contact.vip_popcorn_count || 0,
     });
     onSuccess(id);
     playSound('confirm');
   };
 
+  useEffect(() => {
+    if (currentContactId) loadStatus(currentContactId);
+  }, [currentContactId]);
+
   const handleRedeemPopcorn = async () => {
-    try { await api.redeemPopcorn(status.contactId); playSound('vip'); setNotify({ message: 'Approved!', type: 'success' }); loadStatus(status.contactId); } 
-    catch (err) { setNotify({ message: err.message, type: 'error' }); }
+    try {
+      await api.redeemPopcorn(status.contactId);
+      playSound('vip');
+      setNotify({ message: 'Popcorn dispensed!', type: 'success' });
+      loadStatus(status.contactId);
+    } catch (err) {
+      setNotify({ message: err.message, type: 'error' });
+    }
   };
-
-  const handleClaimFlower = async (staffName) => {
-    try { await api.claimFlower(status.contactId, staffName); playSound('confirm'); setNotify({ message: 'Claimed!', type: 'success' }); loadStatus(status.contactId); setApprovalTarget(null); } 
-    catch (err) { setNotify({ message: err.message, type: 'error' }); }
-  }
-
-  const handleVipUpgrade = async (staffName) => {
-    try { await api.grantVipStatus(status.contactId, staffName); playSound('confirm'); setNotify({ message: 'VIP Status Granted!', type: 'success' }); loadStatus(status.contactId); setApprovalTarget(null); } 
-    catch (err) { setNotify({ message: err.message, type: 'error' }); }
-  }
 
   if (isRegistering) {
     return (
@@ -2431,56 +2430,125 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames 
   }
 
   return (
-    <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
-      <StaffApprovalModal isOpen={!!approvalTarget} actionName={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={approvalTarget === 'VIP UPGRADE' ? handleVipUpgrade : handleClaimFlower} onFocusInput={onFocusInput} setNotify={setNotify} staffNames={staffNames} />
-      <h2 className="neon-text-pink" style={{ textAlign: 'center', marginBottom: '40px' }}>VIP Lounge</h2>
+    <div className="view-container" style={{ padding: '40px 20px', overflowY: 'auto' }}>
+      <h2 className="neon-text-pink" style={{ textAlign: 'center', marginBottom: '32px' }}>VIP Lounge</h2>
+
       {!status ? (
-        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-            <div className="card">
-                <p style={{ marginBottom: '25px', opacity: 0.8 }}>Search account to access VIP perks.</p>
-                <div className="input-group">
-                  <input 
-                    type="text" 
-                    placeholder="Search..." 
-                    value={search} 
-                    readOnly
-                    onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
-                  />
-                </div>
-                <ContactSearchResults
-                  results={searchResults}
-                  onSelect={(c) => { loadStatus(c.contact_id); clearSearch(); }}
-                />
-                <button className="btn btn-violet" onClick={() => { playSound('click'); setIsRegistering(true); }} style={{ width: '100%', marginTop: '20px' }}>Register VIP</button>
+        <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+          <div className="card" style={{ marginBottom: '24px' }}>
+            <p style={{ marginBottom: '20px', opacity: 0.75 }}>Search your account to access VIP perks.</p>
+            <div className="input-group">
+              <input
+                type="text"
+                placeholder="Email, phone, name, or guest ID…"
+                value={search}
+                readOnly
+                onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
+              />
             </div>
+            <ContactSearchResults
+              results={searchResults}
+              onSelect={(c) => { loadStatus(c.contact_id); clearSearch(); }}
+            />
+          </div>
+          <button
+            className="btn btn-violet"
+            onClick={() => { playSound('click'); setIsRegistering(true); }}
+            style={{ width: '100%' }}
+          >
+            Register VIP
+          </button>
         </div>
       ) : (
-        <div className="card" style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
-          <h2 className="neon-text-lime">Member: {status.name}</h2>
-          <p style={{ opacity: 0.65, fontSize: '0.9rem', margin: '8px 0 0' }}>{status.points} pts · 👑 VIP</p>
-          {status.isVip ? (
-            <div style={{ marginTop: '30px' }}>
-                <p className="neon-text-pink" style={{ fontWeight: 'bold' }}>VIP ACTIVE</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '20px' }}>
-                    <div className="card"><h4>Popcorn</h4><button className="btn btn-lime" style={{ width: '100%' }} onClick={() => { playSound('click'); handleRedeemPopcorn(); }}>Refill</button><RefillCountdown lastRedeemed={status.lastRedeemed} /></div>
-                    <div className="card"><h4>Flower</h4>{status.flowerClaimed ? <p>Claimed</p> : <button className="btn btn-violet" style={{ width: '100%' }} onClick={() => { playSound('click'); setApprovalTarget('Claim Flower'); }}>Claim 1g</button>}</div>
-                </div>
+        <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+          {/* VIP Member Card — always shown, click to expand popcorn */}
+          <div
+            className="card"
+            style={{
+              textAlign: 'center',
+              marginBottom: '20px',
+              border: '2px solid rgba(255, 165, 0, 0.5)',
+              background: 'linear-gradient(160deg, rgba(255,165,0,0.1) 0%, rgba(0,0,0,0.5) 100%)',
+              cursor: 'pointer',
+            }}
+            onClick={() => { playSound('click'); setPopcornExpanded((p) => !p); }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '6px' }}>
+              <span style={{ fontSize: '1.4rem' }}>👑</span>
+              <h2 className="neon-text-lime" style={{ margin: 0 }}>{status.name}</h2>
             </div>
-          ) : (
-            <div style={{ marginTop: '30px' }}>
-              <div className="card" style={{ background: 'rgba(255, 0, 127, 0.1)', border: '1px solid var(--cyber-pink)', marginBottom: '20px', padding: '20px' }}>
-                <h3 className="neon-text-pink" style={{ fontSize: '1.8rem', margin: '0 0 10px 0' }}>UPGRADE TO VIP: $20</h3>
-                <p style={{ fontSize: '1rem', fontWeight: 'bold', color: 'white', marginBottom: '10px' }}>VIP Experience includes:</p>
-                <ul style={{ listStyle: 'none', padding: 0, fontSize: '1rem', lineHeight: '1.6', textAlign: 'left' }}>
-                  {VIP_EXPERIENCE_PERKS.map((perk) => (
-                    <li key={perk} style={{ marginBottom: '6px' }}>★ {perk}</li>
-                  ))}
-                </ul>
+            <p style={{ opacity: 0.7, fontSize: '0.9rem', margin: '4px 0 0' }}>
+              {status.points} pts · VIP Active
+            </p>
+            <p style={{ opacity: 0.5, fontSize: '0.78rem', margin: '8px 0 0' }}>
+              {popcornExpanded ? '▲ Tap to collapse' : '▼ Tap for popcorn details'}
+            </p>
+          </div>
+
+          {/* Popcorn Details — expanded on card click */}
+          {popcornExpanded && (
+            <div
+              className="card"
+              style={{
+                marginBottom: '20px',
+                border: '1px solid rgba(255, 165, 0, 0.3)',
+                background: 'rgba(255,165,0,0.05)',
+                textAlign: 'center',
+              }}
+            >
+              <h3 className="neon-text-pink" style={{ margin: '0 0 16px' }}>🍿 Popcorn Info</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                <div className="card" style={{ textAlign: 'center', padding: '16px' }}>
+                  <p style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--neon-lime)', margin: 0 }}>{status.popcornCount}</p>
+                  <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: '4px 0 0' }}>Total refills</p>
+                </div>
+                <div className="card" style={{ textAlign: 'center', padding: '16px' }}>
+                  <RefillCountdown lastRedeemed={status.lastRedeemed} />
+                  <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: '4px 0 0' }}>Next refill</p>
+                </div>
               </div>
-              <button className="btn btn-lime" onClick={() => { playSound('click'); setApprovalTarget('VIP UPGRADE'); }}>Grant VIP Status</button>
+              <button
+                className="btn btn-lime"
+                style={{ width: '100%' }}
+                onClick={(e) => { e.stopPropagation(); playSound('click'); handleRedeemPopcorn(); }}
+              >
+                Dispense Popcorn
+              </button>
             </div>
           )}
-          <button className="btn" onClick={() => { playSound('click'); setStatus(null); clearSearch(); }} style={{ background: 'transparent', marginTop: '30px' }}>Exit</button>
+
+          {/* Upgrade prompt for non-VIP */}
+          {!status.isVip && (
+            <div
+              className="card"
+              style={{
+                background: 'rgba(255, 0, 127, 0.08)',
+                border: '1px solid rgba(255, 0, 127, 0.4)',
+                marginBottom: '20px',
+                padding: '24px',
+                textAlign: 'center',
+              }}
+            >
+              <h3 className="neon-text-pink" style={{ fontSize: '1.6rem', margin: '0 0 12px' }}>UPGRADE TO VIP: $20</h3>
+              <p style={{ marginBottom: '16px', opacity: 0.8 }}>VIP Experience includes:</p>
+              <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.9rem', lineHeight: 1.7, textAlign: 'left', marginBottom: '20px' }}>
+                {VIP_EXPERIENCE_PERKS.map((perk) => (
+                  <li key={perk.label}>★ {perk.label}</li>
+                ))}
+              </ul>
+              <button className="btn btn-lime" style={{ width: '100%' }} onClick={() => { playSound('click'); setIsRegistering(true); }}>
+                Register VIP — $20
+              </button>
+            </div>
+          )}
+
+          <button
+            className="btn"
+            onClick={() => { playSound('click'); setStatus(null); clearSearch(); onNavigate('home'); }}
+            style={{ width: '100%', background: 'transparent' }}
+          >
+            Back to Home
+          </button>
         </div>
       )}
     </div>
@@ -3362,20 +3430,20 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
                   <button type="button" className="btn" style={{ width: '100%', margin: 0, background: 'transparent' }} onClick={closeDevClearModal}>
                     Cancel
                   </button>
-                </div>
+            </div>
               </>
             ) : (
               <>
                 <p style={{ opacity: 0.8, margin: '0 0 16px' }}>Enter your staff PIN to confirm.</p>
-                <div className="input-group">
-                  <input
-                    type="password"
+            <div className="input-group">
+              <input 
+                type="password" 
                     placeholder="Staff PIN"
                     value={wipePin}
-                    readOnly
+                readOnly 
                     onClick={(e) => onFocusInput('numeric', wipePin, setWipePin, 4, null, e.currentTarget)}
-                  />
-                </div>
+              />
+            </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
                   <button
                     type="button"
@@ -3407,11 +3475,11 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
             </button>
           </div>
           <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
-            <input
-              type="text"
-              placeholder="Search name, email, phone, or reference (e.g. CND-00007)..."
+          <input 
+            type="text" 
+            placeholder="Search name, email, phone, or reference (e.g. CND-00007)..." 
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '10px 20px', borderRadius: '10px', color: 'white', width: '100%' }}
-              value={searchTerm}
+            value={searchTerm}
               readOnly
               onClick={(e) => onFocusInput('default', searchTerm, setSearchTerm, null, null, e.currentTarget)}
             />
@@ -4037,23 +4105,23 @@ const FlavorVote = ({ contactId, onBack, setNotify, onFocusInput, onSuccess }) =
     <div className="view-container" style={{ padding: '50px', textAlign: 'center', overflowY: 'auto' }}>
       <h2 className="neon-text-lime" style={{ marginBottom: '10px' }}>Rate Your Favorite Flavor</h2>
       <p style={{ opacity: 0.7, marginBottom: '40px' }}>Tap a seasoning — then link your account to earn 50 points (one vote per guest).</p>
-
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: '20px',
-        maxWidth: '800px',
+      
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(2, 1fr)', 
+        gap: '20px', 
+        maxWidth: '800px', 
         margin: '0 auto',
       }}>
         {FLAVORS.map((flavor) => (
-          <button
-            key={flavor}
+          <button 
+            key={flavor} 
             type="button"
-            className="card btn"
-            style={{
-              padding: '40px 20px',
-              fontSize: '1.3rem',
-              textTransform: 'uppercase',
+            className="card btn" 
+            style={{ 
+              padding: '40px 20px', 
+              fontSize: '1.3rem', 
+              textTransform: 'uppercase', 
               borderColor: selectedFlavor === flavor ? 'var(--neon-lime)' : 'var(--glass-border)',
               margin: 0,
               width: '100%',
@@ -4271,7 +4339,7 @@ const App = () => {
         {view === 'thank-you' && <ThankYou name={currentContactFirstName || currentContactName} isNew={isNewUser} onContinue={() => navigate('main-menu')} />}
         {view === 'profile' && <Profile contactId={currentContactId} onNavigate={navigate} />}
         {view === 'giveaway' && <GiveawayEntry contactId={currentContactId} onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
-        {view === 'vip' && <VipLounge onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
+        {view === 'vip' && <VipLounge onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} currentContactId={currentContactId} />}
         {view === 'staff-login' && <StaffLogin onBack={() => navigate('home')} onLoginSuccess={(name) => { setActiveStaff(name); navigate('staff-dashboard'); }} onFocusInput={openKeyboard} setNotify={setNotify} staffNames={staffNames} />}
         {view === 'staff-dashboard' && (
           <StaffDashboard
