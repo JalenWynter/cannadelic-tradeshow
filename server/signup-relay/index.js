@@ -76,22 +76,17 @@ app.get('/signup/:eventId', (req, res) => {
   res.type('html').send(guestSignupPageHtml(req.params.eventId, title));
 });
 
-// Only allow known staff pages — all QR signups funnel through /staff/cannadelic-2026-06-06
-const KNOWN_STAFF_IDS = ['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06'];
+// All staff routes funnel through /staff/cannadelic-2026-06-06 — shows ALL signups from every funnel
+const UNIFIED_IDS = ['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06'];
 app.get('/staff/:eventId', (req, res) => {
-  const id = req.params.eventId;
-  if (!KNOWN_STAFF_IDS.includes(id)) {
-    return res.redirect(302, '/staff/cannadelic-2026-06-06');
-  }
-  // cannadelic-2026-06-06 shows ALL signups (both booth + colombia funnels)
-  // colombia-retreat-cannadelic-2026-06-06 also shows unified view
-  const UNIFIED_IDS = ['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06'];
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.type('html').send(staffMonitorPageHtml(UNIFIED_IDS));
+  res.redirect(302, '/staff/cannadelic-2026-06-06');
 });
-
 app.get('/staff/all', (req, res) => {
   res.redirect(302, '/staff/cannadelic-2026-06-06');
+});
+app.get('/staff/cannadelic-2026-06-06', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.type('html').send(staffMonitorPageHtml(UNIFIED_IDS));
 });
 
 // GET /api/signup/all/public — returns all signups filtered by eventId query param (supports multi-ID comma-separated)
