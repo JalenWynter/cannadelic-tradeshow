@@ -600,6 +600,33 @@ function openCloudPagesOnLaunch() {
   });
 }
 
+// --- First-Run Production Wipe ---
+// Detect a fresh production install and wipe stale userData to ensure a clean show
+function isFirstRun() {
+  if (!app.isPackaged) return false;
+  const markerPath = path.join(userDataPath, '.first-run-done');
+  if (!fs.existsSync(markerPath)) {
+    // First run — wipe all userData DB files and mark as done
+    try {
+      fs.mkdirSync(userDataPath, { recursive: true });
+      for (const file of fs.readdirSync(userDataPath)) {
+        if (file === '.' || file === '..') continue;
+        const full = path.join(userDataPath, file);
+        try {
+          if (fs.statSync(full).isDirectory()) fs.rmSync(full, { recursive: true, force: true });
+          else fs.unlinkSync(full);
+        } catch (_) {}
+      }
+      fs.writeFileSync(markerPath, new Date().toISOString(), 'utf-8');
+      console.log('First-run wipe complete — production is clean');
+    } catch (err) {
+      console.error('First-run wipe failed:', err.message);
+    }
+    return true;
+  }
+  return false;
+}
+
 ipcMain.handle('get-mobile-signup-url', () => {
   if (!mobileSignupHandlers) initMobileSignup();
   return signupUrls?.publicSignupUrl || null;
@@ -707,6 +734,7 @@ function createWindows() {
     console.log(`Production kiosk — userData: ${userDataPath}`);
   }
   loadStaffRoster();
+  isFirstRun(); // Wipe stale userData on first production launch
   initDB(); // Load cache before windows open
   initMobileSignup();
 

@@ -72,18 +72,17 @@ app.get('/health', (_req, res) => {
 });
 
 app.get('/signup/:eventId', (req, res) => {
+  const eventId = req.params.eventId;
+  // Redirect Colombia retreat QR scans to the main event signup form
+  if (String(eventId || '').includes('colombia-retreat')) {
+    return res.redirect(302, '/signup/cannadelic-2026-06-06?title=Cannadelic%20Night%20Market');
+  }
   const title = String(req.query.title || 'Cannadelic Night Market').slice(0, 80);
-  res.type('html').send(guestSignupPageHtml(req.params.eventId, title));
+  res.type('html').send(guestSignupPageHtml(eventId, title));
 });
 
-// All staff routes funnel through /staff/cannadelic-2026-06-06 — shows ALL signups from every funnel
-const UNIFIED_IDS = ['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06'];
-app.get('/staff/:eventId', (req, res) => {
-  res.redirect(302, '/staff/cannadelic-2026-06-06');
-});
-app.get('/staff/all', (req, res) => {
-  res.redirect(302, '/staff/cannadelic-2026-06-06');
-});
+// All staff routes funnel through /staff/cannadelic-2026-06-06 — shows ALL signups
+const UNIFIED_IDS = ['cannadelic-2026-06-06'];
 app.get('/staff/cannadelic-2026-06-06', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.type('html').send(staffMonitorPageHtml(UNIFIED_IDS));
@@ -97,9 +96,7 @@ app.get('/api/signup/all/public', (req, res) => {
     : null;
   const allSignups = readSignups();
   const filtered = eventIds
-    ? allSignups.filter((s) =>
-        eventIds.some((id) => String(s.eventId || '').includes(id))
-      )
+    ? allSignups.filter((s) => eventIds.includes(s.eventId))
     : allSignups;
   const signups = filtered
     .sort((a, b) => {
@@ -203,6 +200,20 @@ app.get('/api/signup/denied-recent', requireApiKey, (req, res) => {
     .filter((s) => s.eventId === eventId && s.status === 'denied' && new Date(s.deniedAt).getTime() > since)
     .sort((a, b) => new Date(b.deniedAt) - new Date(a.deniedAt));
   res.json({ signups });
+});
+
+// Migration: fix any Colombia retreat signups that were stored with the wrong eventId
+app.post('/api/migrate-colombia-signups', requireApiKey, (req, res) => {
+  const signups = readSignups();
+  let migrated = 0;
+  for (const s of signups) {
+    if (String(s.eventId || '').includes('colombia-retreat')) {
+      s.eventId = 'cannadelic-2026-06-06';
+      migrated += 1;
+    }
+  }
+  if (migrated > 0) writeSignups(signups);
+  res.json({ success: true, migrated });
 });
 
 app.post('/api/signup', rateLimitSignup, (req, res) => {

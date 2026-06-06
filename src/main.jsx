@@ -314,16 +314,16 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
             {layout === 'numeric' ? 'NUMERIC PAD (DRAG TO MOVE)' : 'TOUCH KEYBOARD (DRAG TO MOVE)'}
           </span>
         </div>
-        <button className="key key-special keyboard-hide-btn" onClick={onClose}>HIDE</button>
+        <button className="key key-special keyboard-hide-btn" onClick={(e) => { e.stopPropagation(); onClose(); }}>HIDE</button>
       </div>
       
       {layout === 'numeric' ? (
         <div className="numpad">
           {layouts.numeric.flat().map(key => (
-            <button 
-              key={key} 
-              className={`key ${(key === 'DONE' || key === 'NEXT') ? 'key-wide key-special' : ''}`} 
-              onClick={() => handleKey(key)} 
+            <button
+              key={key}
+              className={`key ${(key === 'DONE' || key === 'NEXT') ? 'key-wide key-special' : ''}`}
+              onClick={(e) => { e.stopPropagation(); handleKey(key); }}
               style={{
                 ...((key === 'DONE' || key === 'NEXT') ? { gridColumn: 'span 3' } : {}),
                 ...((key === 'CLEAR' || key === 'BACKSPACE') ? { fontSize: '0.7rem' } : {})
@@ -337,9 +337,13 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
         layouts.default.map((row, i) => (
           <div key={i} className="keyboard-row">
             {row.map(key => (
-              <button key={key} className={`key ${key.length > 1 ? 'key-wide key-special' : ''}`} onClick={() => handleKey(key)}>
-                {key}
-              </button>
+              <button
+              key={key}
+              className={`key ${key.length > 1 ? 'key-wide key-special' : ''}`}
+              onClick={(e) => { e.stopPropagation(); handleKey(key); }}
+            >
+              {key}
+            </button>
             ))}
           </div>
         ))

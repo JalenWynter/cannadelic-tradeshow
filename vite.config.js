@@ -2,9 +2,29 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import { resolve } from 'path';
+import fs from 'fs';
 import waitOn from 'wait-on';
 
 const DEV_SERVER_URL = 'http://localhost:5173';
+
+// Copy seed DB files to electron output directory alongside main.js
+function copySeedFilesPlugin() {
+  return {
+    name: 'copy-seed-files',
+    closeBundle() {
+      const seedFiles = ['DB_Attendees.json', 'DB_Settings.json', 'DB_Engagement.json', 'StaffLogs.json'];
+      // electron() output dir is dist-electron by default
+      const outDir = resolve(__dirname, 'dist-electron');
+      for (const file of seedFiles) {
+        const src = resolve(__dirname, 'src', file);
+        const dst = resolve(outDir, file);
+        if (fs.existsSync(src)) {
+          fs.copyFileSync(src, dst);
+        }
+      }
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -29,18 +49,11 @@ export default defineConfig(({ command }) => {
           await startup();
         },
       }),
-      // If using @vitejs/plugin-electron-renderer, uncomment and configure it here.
-      // For this setup, we'll rely on vite-plugin-electron's main process handling.
+      copySeedFilesPlugin(),
     ],
-    // Configuration for the renderer process
-    // renderer: {
-    //   // This is not typically needed when using vite-plugin-electron's default setup
-    //   // isElectron: true,
-    // },
-    // Resolve aliases can be useful for organizing files
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src'), // Example alias for src directory
+        '@': resolve(__dirname, 'src'),
       },
     },
   };

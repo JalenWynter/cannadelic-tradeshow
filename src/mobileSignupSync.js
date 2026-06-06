@@ -3,14 +3,9 @@
 import { signupStreamForEventId } from './retreatInterest.js';
 
 function buildSyncStreams(config) {
-  const streams = [
+  return [
     { eventId: config.eventId, signupStream: 'booth' },
   ];
-  const colombiaEventId = config.colombiaEventId;
-  if (colombiaEventId && colombiaEventId !== config.eventId) {
-    streams.push({ eventId: colombiaEventId, signupStream: 'colombia_retreat' });
-  }
-  return streams;
 }
 
 export function createMobileSignupSync(config, handlers, onUpdate) {
