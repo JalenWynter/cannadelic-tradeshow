@@ -121,6 +121,7 @@ h2{font-size:.95rem;margin:16px 0 10px;color:#ccff00;letter-spacing:.5px}
 </div>
 <div id="viewQueue">
   <input id="staffName" placeholder="Your name (optional)" autocomplete="name" maxlength="40" style="width:100%;padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:16px;margin-bottom:12px" />
+  <input id="staffPin" type="password" placeholder="Staff PIN (if required)" autocomplete="off" maxlength="20" style="width:100%;padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:16px;margin-bottom:12px" />
   <h2>Pending <span class="count" id="pendingCount">0</span></h2>
   <div id="pendingList"><div class="empty">Loading…</div></div>
 </div>
@@ -329,6 +330,7 @@ function applyLocalAction(signupId,action,staffName){
 async function submitAction(){
   if(actionBusy||!confirmSignupId||!confirmAction)return;
   const staffName=document.getElementById('staffName').value.trim()||'Staff';
+  const staffPin=document.getElementById('staffPin').value.trim()||'';
   const signupId=confirmSignupId;
   const action=confirmAction;
   const path=action==='deny'?'deny-staff':'approve-staff';
@@ -338,7 +340,7 @@ async function submitAction(){
     const res=await fetch('/api/signup/'+encodeURIComponent(signupId)+'/'+path,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({staffName,confirmed:true}),
+      body:JSON.stringify({staffName,staffPin,confirmed:true}),
     });
     const data=await res.json();
     if(!res.ok)throw new Error(data.error||(action==='deny'?'Decline failed':'Approve failed'));

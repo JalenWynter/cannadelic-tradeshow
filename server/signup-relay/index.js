@@ -23,6 +23,7 @@ import { staffMonitorPageHtml, staffSignupRecord } from './staffMonitorPage.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8787;
 const API_KEY = process.env.RELAY_API_KEY || 'dev-change-me-before-show';
+const STAFF_PIN = process.env.STAFF_MONITOR_PIN || null;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'signups.json');
 
@@ -139,8 +140,9 @@ app.get('/api/signup/:signupId/status/public', (req, res) => {
 
 app.post('/api/signup/:signupId/approve-staff', rateLimitApprove, (req, res) => {
   const { signupId } = req.params;
-  const { staffName, confirmed } = req.body || {};
+  const { staffName, staffPin, confirmed } = req.body || {};
   if (!confirmed) return res.status(400).json({ error: 'Confirmation required' });
+  if (STAFF_PIN && staffPin !== STAFF_PIN) return res.status(403).json({ error: 'Invalid staff PIN' });
 
   const signups = readSignups();
   const signup = signups.find((s) => s.signupId === signupId);
@@ -158,8 +160,9 @@ app.post('/api/signup/:signupId/approve-staff', rateLimitApprove, (req, res) => 
 
 app.post('/api/signup/:signupId/deny-staff', rateLimitApprove, (req, res) => {
   const { signupId } = req.params;
-  const { staffName, confirmed } = req.body || {};
+  const { staffName, staffPin, confirmed } = req.body || {};
   if (!confirmed) return res.status(400).json({ error: 'Confirmation required' });
+  if (STAFF_PIN && staffPin !== STAFF_PIN) return res.status(403).json({ error: 'Invalid staff PIN' });
 
   const signups = readSignups();
   const signup = signups.find((s) => s.signupId === signupId);

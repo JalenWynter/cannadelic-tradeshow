@@ -1498,6 +1498,8 @@ const CheckIn = ({ onBack, onSuccess, onFocusInput, vipRegistration = false }) =
         ? await api.checkInOrRegisterVip({ ...formData, ticketNumbers: ticketNumbers.filter(t => t.trim().length === 6) })
         : await api.checkInOrRegister({ ...formData, ticketNumbers: ticketNumbers.filter(t => t.trim().length === 6) });
       playSound(vipRegistration ? 'vip' : 'confirm');
+      // Push booth check-in to relay so it appears in the unified staff queue
+      api.pushBoothCheckinToRelay({ firstName: formData.firstName, lastName: formData.lastName, email: formData.email, phone: formData.phone });
       onSuccess(result.contactId, result.isNew, result.contact?.name || formData.firstName, result);
     } catch (err) { 
       playSound('error'); 
@@ -3288,6 +3290,44 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
               )}
               <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Points / Raffle Entries</span>{attendeeDetailModal.total_points} pts · {attendeeDetailModal.entries ?? 0} entries</div>
             </div>
+            {attendeeDetailModal.mobile_signup_pending ? (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  className="btn btn-lime"
+                  style={{ flex: 1 }}
+                  onClick={async () => {
+                    try {
+                      await api.confirmMobileSignup(attendeeDetailModal.contact_id, staffName);
+                      setNotify({ message: 'QR signup approved.', type: 'success' });
+                      await loadData();
+                      const updated = await api.getContactById(attendeeDetailModal.contact_id);
+                      setAttendeeDetailModal((prev) => prev ? { ...prev, ...updated } : prev);
+                    } catch (err) {
+                      setNotify({ message: err.message || 'Failed to approve', type: 'error' });
+                    }
+                  }}
+                >
+                  ✓ Approve QR
+                </button>
+                <button
+                  className="btn"
+                  style={{ flex: 1, background: 'rgba(255,80,80,0.15)', border: '1px solid rgba(255,80,80,0.45)', color: '#ff8a8a' }}
+                  onClick={async () => {
+                    try {
+                      await api.denyMobileSignup(attendeeDetailModal.contact_id, staffName);
+                      setNotify({ message: 'QR signup declined.', type: 'success' });
+                      await loadData();
+                      const updated = await api.getContactById(attendeeDetailModal.contact_id);
+                      setAttendeeDetailModal((prev) => prev ? { ...prev, ...updated } : prev);
+                    } catch (err) {
+                      setNotify({ message: err.message || 'Failed to decline', type: 'error' });
+                    }
+                  }}
+                >
+                  ✕ Decline QR
+                </button>
+              </div>
+            ) : null}
             <div style={{ marginTop: '16px' }}>
               <PopcornRefillPanel
                 contact={attendeeDetailModal}

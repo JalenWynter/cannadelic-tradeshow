@@ -43,6 +43,38 @@ const api = {
   },
 
   // --- Registration & Check-In ---
+  async pushBoothCheckinToRelay({ firstName, lastName, email, phone }) {
+    const status = await window.electronAPI.getMobileSignupStatus();
+    if (!status?.mode || status.mode === 'disabled') return;
+    try {
+      const fn = firstName?.trim() || '';
+      const ln = lastName?.trim() || '';
+      const body = {
+        eventId: status.eventId || 'cannadelic-2026-06-06',
+        firstName: fn,
+        lastName: ln,
+        email: email || '',
+        phone: phone ? phone.replace(/\D/g, '') : '',
+      };
+      const res = await fetch(`${status.relayApiUrl}/api/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.signupId) return;
+      await fetch(`${status.relayApiUrl}/api/signup/${data.signupId}/confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${status.relayApiKey}`,
+        },
+        body: JSON.stringify({ staffName: 'Kiosk Check-In', kioskLabel: 'Booth', confirmed: true }),
+      });
+    } catch { /* relay push non-critical */ }
+  },
+
   async checkInOrRegister({ firstName, lastName, email, phone, ticketNumbers }) {
     const e = email ? email.toLowerCase().trim() : '';
     const p = phone ? phone.replace(/\D/g, '') : '';
