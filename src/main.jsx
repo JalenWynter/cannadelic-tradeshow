@@ -26,8 +26,8 @@ const VIP_EXPERIENCE_PERKS = [
   { label: 'Gold wristband' },
   { label: '10% off everything at booth' },
   { label: '+1G Free 🌸' },
-  { label: 'Free Popcorn (every 10 min)', badge: '10 mins' },
-  { label: '2 free raffle entries' },
+  { label: 'Free Popcorn' },
+  { label: '2 free raffle entries', center: true },
 ];
 
 /** Earn-points tasks — points must match DB_Settings.json Actions */
@@ -778,7 +778,7 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
           />
         </HomeMenuRow>
 
-        {/* 3. Engage: giveaway */}
+        {/* 3. Engage: giveaway + VIP Lounge */}
         <HomeMenuRow>
           <HomeMenuCard
             variant="violet"
@@ -787,6 +787,14 @@ const Home = ({ onNavigate, currentContactId, currentContactName, setNotify }) =
             subtitle="Earn Points → Unlock VIP"
             onClick={() => go('giveaway')}
             attentionIndex={4}
+          />
+          <HomeMenuCard
+            variant="pink"
+            iconSrc="/icons/vip-lounge.svg"
+            title="VIP LOUNGE"
+            subtitle="Register for VIP perks & rewards"
+            onClick={() => go('vip')}
+            attentionIndex={3}
           />
         </HomeMenuRow>
 
@@ -1936,7 +1944,7 @@ const VipExperienceSection = ({ perks = VIP_EXPERIENCE_PERKS, accent = 'var(--ne
             </span>
           )}
           <span style={{ fontSize: '1.1rem', flexShrink: 0, opacity: 0.85 }}>★</span>
-          <span>{perk.label}</span>
+          <span style={{ textAlign: perk.center ? 'center' : 'left' }}>{perk.label}</span>
         </div>
       ))}
     </div>
@@ -4263,6 +4271,7 @@ const App = () => {
         {view === 'thank-you' && <ThankYou name={currentContactFirstName || currentContactName} isNew={isNewUser} onContinue={() => navigate('main-menu')} />}
         {view === 'profile' && <Profile contactId={currentContactId} onNavigate={navigate} />}
         {view === 'giveaway' && <GiveawayEntry contactId={currentContactId} onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
+        {view === 'vip' && <VipLounge onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
         {view === 'staff-login' && <StaffLogin onBack={() => navigate('home')} onLoginSuccess={(name) => { setActiveStaff(name); navigate('staff-dashboard'); }} onFocusInput={openKeyboard} setNotify={setNotify} staffNames={staffNames} />}
         {view === 'staff-dashboard' && (
           <StaffDashboard

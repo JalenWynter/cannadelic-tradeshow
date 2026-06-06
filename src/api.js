@@ -236,13 +236,15 @@ const api = {
   async redeemPoints(contactId, points, itemName, staffName) {
     const c = await this.getContactById(contactId);
     if ((c.total_points || 0) < points) throw new Error('Insufficient points');
-    await window.electronAPI.jsonRun('Contacts', 'update', { total_points: (c.total_points || 0) - points }, { contact_id: contactId });
-    await window.electronAPI.logStaffAction({ 
-      type: 'REDEMPTION', 
-      staff_name: staffName, 
-      contact_id: contactId, 
+    const updates = { total_points: (c.total_points || 0) - points };
+    if (itemName === 'VIP Upgrade') updates.is_vip = true;
+    await window.electronAPI.jsonRun('Contacts', 'update', updates, { contact_id: contactId });
+    await window.electronAPI.logStaffAction({
+      type: itemName === 'VIP Upgrade' ? 'VIP_GRANT' : 'REDEMPTION',
+      staff_name: staffName,
+      contact_id: contactId,
       points_deducted: points,
-      item: itemName 
+      item: itemName
     });
   },
   async wipeAllData() {
