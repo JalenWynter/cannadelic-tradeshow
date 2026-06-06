@@ -1188,9 +1188,7 @@ const MobileSignupPanel = ({
         api.getMobileSignupStatus(),
         showPending ? api.getPendingMobileSignups(pendingStream) : Promise.resolve([]),
         showStaffTools
-          ? (stream === 'colombia_retreat'
-            ? api.getMobileSignupStatus().then((s) => s?.publicColombiaStaffUrl || null)
-            : api.getCloudStaffUrl())
+          ? api.getCloudStaffUrl()
           : Promise.resolve(null),
       ]);
       setSignupUrl(url || '');

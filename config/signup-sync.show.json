@@ -6,7 +6,7 @@
   "publicSignupUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/signup/cannadelic-2026-06-06?title=Cannadelic%20Night%20Market",
   "publicStaffUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/staff/cannadelic-2026-06-06",
   "publicColombiaSignupUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/signup/colombia-retreat-cannadelic-2026-06-06?title=Colombia%20Retreat%20Early%20Bird",
-  "publicColombiaStaffUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/staff/colombia-retreat-cannadelic-2026-06-06",
+  "publicColombiaStaffUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/staff/cannadelic-2026-06-06",
   "syncIntervalMs": 4000,
   "_comment": "Bundled show config — auto-seeded on first launch. Do not edit on show PC unless IT directs."
 }
