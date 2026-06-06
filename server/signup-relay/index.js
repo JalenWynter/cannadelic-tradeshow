@@ -83,7 +83,7 @@ app.get('/staff/:eventId', (req, res) => {
 
 app.get('/staff/all', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.type('html').send(staffMonitorPageHtml(['booth', 'colombia-retreat']));
+  res.type('html').send(staffMonitorPageHtml(['booth', 'colombia-retreat-cannadelic-2026-06-06']));
 });
 
 app.get('/api/signup/all/public', (req, res) => {
