@@ -84,12 +84,10 @@ app.get('/staff/:eventId', (req, res) => {
     return res.redirect(302, '/staff/cannadelic-2026-06-06');
   }
   // cannadelic-2026-06-06 shows ALL signups (both booth + colombia funnels)
-  // colombia-retreat-cannadelic-2026-06-06 redirects to unified view
-  const eventIds = id === 'cannadelic-2026-06-06'
-    ? ['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06']
-    : ['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06'];
+  // colombia-retreat-cannadelic-2026-06-06 also shows unified view
+  const UNIFIED_IDS = ['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06'];
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.type('html').send(staffMonitorPageHtml(eventIds));
+  res.type('html').send(staffMonitorPageHtml(UNIFIED_IDS));
 });
 
 app.get('/staff/all', (req, res) => {
