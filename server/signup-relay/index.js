@@ -93,7 +93,7 @@ app.get('/api/signup/all/public', (req, res) => {
   const allSignups = readSignups();
   const filtered = eventIds
     ? allSignups.filter((s) =>
-        eventIds.some((id) => String(s.eventId || '').includes(id))
+        eventIds.some((id) => String(s.eventId || '').startsWith(id))
       )
     : allSignups;
   const signups = filtered
