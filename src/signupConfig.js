@@ -36,7 +36,7 @@ export function isLocalRelayHost(relayApiUrl) {
   try {
     const host = new URL(relayApiUrl).hostname;
     return host === '127.0.0.1' || host === 'localhost' || host === '::1';
-  } catch {
+  } catch (_) {
     return false;
   }
 }
@@ -58,7 +58,7 @@ function rewriteLocalhostUrl(url, publicBase) {
       parsed.port = pub.port;
       return parsed.toString();
     }
-  } catch {
+  } catch (_) {
     /* keep original */
   }
   return url;
@@ -216,7 +216,7 @@ export function isProductionCloudConfig(config) {
   try {
     const u = new URL(config.relayApiUrl);
     return u.protocol === 'https:' && !isLocalRelayHost(config.relayApiUrl);
-  } catch {
+  } catch (_) {
     return false;
   }
 }

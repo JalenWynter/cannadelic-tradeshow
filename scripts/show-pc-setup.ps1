@@ -33,7 +33,7 @@ Write-Host "✓ Bundled show config found (auto-seeds on first launch)" -Foregro
 Write-Host ""
 
 Write-Host "Installing dependencies…"
-npm ci
+npm install
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""

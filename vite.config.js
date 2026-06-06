@@ -45,7 +45,7 @@ export default defineConfig(({ command }) => {
               await ensureDevTunnel('8787');
             }
           }
-          await waitOn({ resources: [DEV_SERVER_URL], timeout: 30000 });
+          await waitOn({ resources: [`${DEV_SERVER_URL}/`], timeout: 60000, debug: true });
           await startup();
         },
       }),

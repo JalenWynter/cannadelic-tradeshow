@@ -30,7 +30,7 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
     try {
       const res = await fetch(`${config.relayApiUrl.replace(/\/$/, '')}/health`, { signal: AbortSignal.timeout(8000) });
       return res.ok;
-    } catch {
+    } catch (_) {
       return false;
     }
   };
@@ -184,7 +184,7 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
           pushed += 1;
           console.log(`Relay synced approval for ${item.displayId || item.remoteSignupId}`);
         }
-      } catch {
+      } catch (_) {
         // retry on next sync interval
       }
     }
@@ -203,7 +203,7 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
           pushed += 1;
           console.log(`Relay synced decline for ${item.displayId || item.remoteSignupId}`);
         }
-      } catch {
+      } catch (_) {
         // retry on next sync interval
       }
     }
@@ -238,7 +238,7 @@ export function createMobileSignupSync(config, handlers, onUpdate) {
           );
           if (result?.success) updated += 1;
         }
-      } catch {
+      } catch (_) {
         // ignore per-signup status errors during sync
       }
     }

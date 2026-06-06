@@ -22,7 +22,7 @@ req('relayApiUrl', config.relayApiUrl, 'relayApiUrl required');
 let relayHost = '';
 try {
   relayHost = new URL(config.relayApiUrl).hostname;
-} catch {
+} catch (_) {
   errors.push('relayApiUrl is not a valid URL');
 }
 
@@ -51,8 +51,24 @@ if (warnings.length) {
 
 const base = config.relayApiUrl.replace(/\/$/, '');
 
+const TIMEOUT_MS = 10_000;
+
+const withTimeout = (url, options = {}) =>
+  fetch(url, { ...options, signal: AbortSignal.timeout(TIMEOUT_MS) });
+
 console.log('\nChecking relay health…');
-const healthRes = await fetch(`${base}/health`);
+let healthRes;
+try {
+  healthRes = await withTimeout(`${base}/health`);
+} catch (e) {
+  if (e.name === 'TimeoutError') {
+    console.error(`✗ Health check timed out after ${TIMEOUT_MS / 1000}s — relay unreachable`);
+  } else {
+    console.error(`✗ Health check failed: ${e.message}`);
+  }
+  console.error('  Check: is the Railway relay deployed? Run: npm run deploy:railway');
+  process.exit(1);
+}
 if (!healthRes.ok) {
   console.error(`✗ Health check failed (${healthRes.status}) — is Railway deployed?`);
   process.exit(1);
@@ -61,9 +77,19 @@ console.log('✓ Relay health OK');
 
 console.log('Checking API key…');
 const pendingUrl = `${base}/api/signup/pending?eventId=${encodeURIComponent(config.eventId)}`;
-const authRes = await fetch(pendingUrl, {
-  headers: { Authorization: `Bearer ${config.relayApiKey}` },
-});
+let authRes;
+try {
+  authRes = await withTimeout(pendingUrl, {
+    headers: { Authorization: `Bearer ${config.relayApiKey}` },
+  });
+} catch (e) {
+  if (e.name === 'TimeoutError') {
+    console.error(`✗ API key check timed out after ${TIMEOUT_MS / 1000}s`);
+  } else {
+    console.error(`✗ API key check failed: ${e.message}`);
+  }
+  process.exit(1);
+}
 if (authRes.status === 401) {
   console.error('✗ API key mismatch — relayApiKey must match Railway RELAY_API_KEY');
   process.exit(1);

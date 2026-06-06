@@ -792,7 +792,7 @@ ipcMain.on('open-external', (event, url) => {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return;
     shell.openExternal(url);
-  } catch {
+  } catch (_) {
     // ignore invalid URLs
   }
 });

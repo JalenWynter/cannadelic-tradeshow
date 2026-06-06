@@ -23,7 +23,7 @@ function commandExists(cmd) {
   try {
     execSync(`command -v ${cmd}`, { stdio: 'ignore' });
     return true;
-  } catch {
+  } catch (_) {
     return false;
   }
 }
@@ -45,7 +45,7 @@ function writeTunnelConfig(publicBase, provider, eventId) {
 function clearTunnelConfig() {
   try {
     if (fs.existsSync(TUNNEL_CONFIG)) fs.unlinkSync(TUNNEL_CONFIG);
-  } catch {
+  } catch (_) {
     /* ignore */
   }
 }

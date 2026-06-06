@@ -12,8 +12,18 @@ const showConfig = path.join(root, 'config', 'signup-sync.show.json');
 const showRoster = path.join(root, 'config', 'staff.roster.show.json');
 
 function run(cmd, args, opts = {}) {
-  const result = spawnSync(cmd, args, { stdio: 'inherit', cwd: root, shell: process.platform === 'win32', ...opts });
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  const isWin = process.platform === 'win32';
+  const shell = isWin ? true : '/bin/bash';
+  const result = spawnSync(cmd, args, {
+    stdio: 'inherit',
+    cwd: root,
+    shell,
+    ...opts,
+  });
+  if (result.status !== 0) {
+    console.error(`\n✗ Command failed: ${cmd} ${args.join(' ')}`);
+    process.exit(result.status ?? 1);
+  }
 }
 
 console.log('\n=== GŪDESSENCE Show PC Setup ===\n');
@@ -29,7 +39,7 @@ console.log('✓ Bundled show config present (signup-sync.show.json, staff.roste
 console.log('  First app launch auto-copies these to AppData — no manual JSON editing.\n');
 
 console.log('Installing dependencies…');
-run('npm', ['ci']);
+run('npm', ['install']);
 
 console.log('\nValidating Railway relay…');
 run('node', [path.join(root, 'scripts', 'validate-show-config.mjs'), showConfig]);

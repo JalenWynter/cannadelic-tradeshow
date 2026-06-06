@@ -19,7 +19,7 @@ export function readProjectSignupConfig() {
   if (!fs.existsSync(configPath)) return null;
   try {
     return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-  } catch {
+  } catch (_) {
     return null;
   }
 }
@@ -34,7 +34,7 @@ export function shouldStartDevRelayStack() {
       console.log('[dev] Production cloud relay in signup-sync.json — skipping local relay/tunnel');
       return false;
     }
-  } catch {
+  } catch (_) {
     return true;
   }
   return true;

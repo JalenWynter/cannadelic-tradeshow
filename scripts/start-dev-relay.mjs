@@ -19,7 +19,7 @@ async function relayHealthOk(origin) {
   try {
     const res = await fetch(`${origin}/health`);
     return res.ok;
-  } catch {
+  } catch (_) {
     return false;
   }
 }
@@ -29,7 +29,7 @@ async function relayAuthOk(origin, eventId, apiKey) {
     const url = `${origin}/api/signup/pending?eventId=${encodeURIComponent(eventId)}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
     return res.status === 200;
-  } catch {
+  } catch (_) {
     return false;
   }
 }
@@ -37,7 +37,7 @@ async function relayAuthOk(origin, eventId, apiKey) {
 function killPort(port) {
   try {
     execSync(`lsof -ti :${port} | xargs kill -9 2>/dev/null || true`, { stdio: 'ignore' });
-  } catch {
+  } catch (_) {
     /* port already free */
   }
 }

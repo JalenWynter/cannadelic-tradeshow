@@ -72,7 +72,7 @@ const api = {
         },
         body: JSON.stringify({ staffName: 'Kiosk Check-In', kioskLabel: 'Booth', confirmed: true }),
       });
-    } catch { /* relay push non-critical */ }
+    } catch (_) { /* relay push non-critical */ }
   },
 
   async checkInOrRegister({ firstName, lastName, email, phone, ticketNumbers }) {

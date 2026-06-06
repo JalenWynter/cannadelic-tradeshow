@@ -2,7 +2,7 @@
   "name": "gudessence-tradeshow-app",
   "version": "1.0.0",
   "description": "",
-  "main": "src/main.js",
+  "main": "dist-electron/main.js",
   "private": true,
   "type": "module",
   "scripts": {

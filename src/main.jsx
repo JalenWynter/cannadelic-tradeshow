@@ -412,7 +412,7 @@ function useContactSearch({ minLength = CONTACT_SEARCH_MIN_LENGTH, debounceMs = 
     searchTimeout.current = setTimeout(async () => {
       try {
         setSearchResults(await api.searchContacts(trimmed, limit));
-      } catch {
+      } catch (_) {
         setSearchResults([]);
       }
     }, debounceMs);
@@ -2898,7 +2898,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
     searchSuggestTimeout.current = setTimeout(async () => {
       try {
         setSearchSuggestions(await api.searchContacts(trimmed, 8));
-      } catch {
+      } catch (_) {
         setSearchSuggestions([]);
       }
     }, CONTACT_SEARCH_DEBOUNCE_MS);
@@ -3007,7 +3007,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNaviga
     try {
       const pending = await api.getAllPendingMobileSignups();
       setPendingQrCount(pending.length);
-    } catch {
+    } catch (_) {
       setPendingQrCount(0);
     }
   };
