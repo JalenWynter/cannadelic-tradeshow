@@ -4,7 +4,7 @@
   "relayApiUrl": "https://gudessence-cannadelic-relay-production.up.railway.app",
   "relayApiKey": "a25774fae20d082c37ea47384a5736f00e49a164e1da064b8aa577442a4a8e4c",
   "publicSignupUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/signup/cannadelic-2026-06-06?title=Cannadelic%20Night%20Market",
-  "publicStaffUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/staff/all",
+  "publicStaffUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/staff/cannadelic-2026-06-06",
   "publicColombiaSignupUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/signup/colombia-retreat-cannadelic-2026-06-06?title=Colombia%20Retreat%20Early%20Bird",
   "publicColombiaStaffUrl": "https://gudessence-cannadelic-relay-production.up.railway.app/staff/colombia-retreat-cannadelic-2026-06-06",
   "syncIntervalMs": 4000,
