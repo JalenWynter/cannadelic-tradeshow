@@ -208,36 +208,90 @@ input:focus {
 /* Virtual Keyboard */
 .keyboard-overlay {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(10, 10, 12, 0.9);
-  border-top: 2px solid var(--neon-lime);
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  width: min(850px, calc(100vw - 24px));
+  background: rgba(10, 10, 12, 0.95);
+  border: 2px solid var(--neon-lime);
+  border-radius: 16px;
   padding: 15px;
   z-index: 11000;
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 -10px 50px rgba(0,0,0,0.9);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(15px);
-  animation: slideUp 0.2s ease-out;
+  animation: keyboardPopIn 0.2s ease-out;
 }
 
-/* Ensure views can scroll above the keyboard */
-.keyboard-open .view-container {
-  padding-bottom: 450px !important;
-  justify-content: flex-start !important;
+.keyboard-overlay--placed {
+  transform: none;
+  animation: none;
+}
+
+.keyboard-overlay--pending {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.keyboard-header {
+  margin-bottom: 15px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.keyboard-drag-handle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(204, 255, 0, 0.35);
+  background: rgba(204, 255, 0, 0.06);
+  color: var(--neon-lime);
+  font-weight: bold;
+  font-size: 0.85rem;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.keyboard-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(204, 255, 0, 0.12);
+}
+
+.keyboard-drag-grip {
+  font-size: 1rem;
+  letter-spacing: -2px;
+  opacity: 0.8;
+}
+
+.keyboard-drag-label {
+  line-height: 1.2;
+}
+
+.keyboard-hide-btn {
+  min-width: 80px !important;
+  height: 35px !important;
+  font-size: 0.8rem !important;
+  flex: 0 0 auto;
+}
+
+@keyframes keyboardPopIn {
+  from { opacity: 0; transform: translate(-50%, -45%) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 /* Shift modals up when keyboard is open */
 .keyboard-open .modal-overlay {
   align-items: flex-start !important;
   padding-top: 50px !important;
-}
-
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
 }
 
 .keyboard-row {

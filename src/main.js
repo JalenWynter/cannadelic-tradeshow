@@ -3,6 +3,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import zlib from 'zlib';
+import { createMobileSignupHandlers } from './mobileSignup.js';
+import { loadSignupConfig, isCloudSignupEnabled, resolveSignupUrls, isProductionCloudConfig } from './signupConfig.js';
+import { createMobileSignupSync } from './mobileSignupSync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,24 +19,33 @@ function getStaffRosterPaths() {
   const projectRoot = path.join(__dirname, '..');
   return {
     user: path.join(userDataPath, 'staff.roster.json'),
-    example: path.join(projectRoot, 'config', 'staff.roster.example.json'),
+    bundled: path.join(projectRoot, 'config', 'staff.roster.example.json'),
+    localOverride: path.join(projectRoot, 'config', 'staff.roster.json'),
   };
 }
 
+function parseStaffRosterFile(filePath) {
+  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  if (!Array.isArray(parsed)) return null;
+  const roster = parsed.filter((s) => s?.name && s?.pin);
+  return roster.length ? roster : null;
+}
+
 function loadStaffRoster() {
-  const { user: userPath, example: examplePath } = getStaffRosterPaths();
+  const { user: userPath, bundled: bundledPath, localOverride: overridePath } = getStaffRosterPaths();
   try {
-    if (!fs.existsSync(userPath) && fs.existsSync(examplePath)) {
-      fs.mkdirSync(userDataPath, { recursive: true });
-      fs.copyFileSync(examplePath, userPath);
-      console.warn('Seeded staff.roster.json from example — change PINs before the event.');
-    }
-    if (fs.existsSync(userPath)) {
-      const parsed = JSON.parse(fs.readFileSync(userPath, 'utf-8'));
-      if (Array.isArray(parsed)) {
-        staffRoster = parsed.filter((s) => s?.name && s?.pin);
+    const sourcePath = [overridePath, bundledPath].find((p) => fs.existsSync(p));
+    if (sourcePath) {
+      staffRoster = parseStaffRosterFile(sourcePath);
+      if (staffRoster) {
+        fs.mkdirSync(userDataPath, { recursive: true });
+        fs.writeFileSync(userPath, `${JSON.stringify(staffRoster, null, 2)}\n`);
         return;
       }
+    }
+    if (fs.existsSync(userPath)) {
+      staffRoster = parseStaffRosterFile(userPath);
+      if (staffRoster) return;
     }
   } catch (err) {
     console.error('Failed to load staff roster:', err.message);
@@ -48,6 +60,11 @@ function validateStaffPin(name, pin) {
 }
 
 let windows = [];
+let mobileSignupHandlers = null;
+let mobileSignupSync = null;
+let signupConfig = null;
+let signupUrls = null;
+const projectRoot = path.join(__dirname, '..');
 
 // --- Multi-File DB Mapping ---
 const DB_MAP = {
@@ -444,9 +461,135 @@ ipcMain.handle('wipe-all-data', async (event) => {
   return { success: true };
 });
 
+function broadcastMobileSignupUpdate() {
+  windows.forEach((win) => {
+    if (!win.isDestroyed()) win.webContents.send('mobile-signup-update');
+  });
+}
+
+function initMobileSignup() {
+  if (!mobileSignupHandlers) {
+    mobileSignupHandlers = createMobileSignupHandlers({ IN_MEMORY_DB, persistToDisk });
+  }
+
+  signupConfig = loadSignupConfig(projectRoot, userDataPath);
+  signupUrls = resolveSignupUrls(signupConfig);
+
+  if (isCloudSignupEnabled(signupConfig) && !mobileSignupSync) {
+    mobileSignupSync = createMobileSignupSync(
+      { ...signupConfig, ...signupUrls, publicSignupUrl: signupUrls.publicSignupUrl },
+      mobileSignupHandlers,
+      () => {
+        broadcastMobileSignupUpdate();
+      }
+    );
+    mobileSignupSync.start();
+    console.log(`HTTPS mobile signup: ${signupUrls.publicSignupUrl}`);
+    console.log(`HTTPS staff monitor: ${signupUrls.publicStaffUrl}`);
+    if (signupUrls.localDev) {
+      console.log(`DEV: Phone QR requires same Wi‑Fi — not LTE or offline (${signupUrls.phoneNetworkHint})`);
+    }
+    if (signupUrls.tunnelActive) {
+      console.log(`DEV tunnel (${signupUrls.tunnelProvider}): phones use LTE/any Wi‑Fi → ${signupUrls.publicSignupUrl}`);
+    }
+    if (signupUrls.deploymentMode === 'production-cloud') {
+      console.log('Production cloud relay — kiosk needs internet (hotspot OK); guests use LTE via same relay');
+    }
+    return;
+  }
+
+  console.warn('Cloud signup not configured — copy config/signup-sync.example.json to signup-sync.json with your HTTPS relay.');
+}
+
+function openCloudPagesOnLaunch() {
+  if (!isCloudSignupEnabled(signupConfig) || !signupUrls) return;
+  console.log(`Opening HTTPS staff monitor: ${signupUrls.publicStaffUrl}`);
+  shell.openExternal(signupUrls.publicStaffUrl).catch((err) => {
+    console.error('Could not auto-open HTTPS staff page:', err.message);
+  });
+}
+
+ipcMain.handle('get-mobile-signup-url', () => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  return signupUrls?.publicSignupUrl || null;
+});
+
+ipcMain.handle('get-cloud-staff-url', () => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  return signupUrls?.publicStaffUrl || null;
+});
+
+ipcMain.handle('open-cloud-staff-page', () => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  openCloudPagesOnLaunch();
+  return signupUrls?.publicStaffUrl || null;
+});
+
+ipcMain.handle('get-mobile-signup-status', () => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  if (mobileSignupSync) {
+    return {
+      ...mobileSignupSync.getStatus(),
+      publicStaffUrl: signupUrls?.publicStaffUrl || null,
+      publicSignupUrl: signupUrls?.publicSignupUrl || null,
+      localDev: signupUrls?.localDev || false,
+      tunnelActive: signupUrls?.tunnelActive || false,
+      tunnelProvider: signupUrls?.tunnelProvider || null,
+      deploymentMode: signupUrls?.deploymentMode || 'disabled',
+      phoneNetworkHint: signupUrls?.phoneNetworkHint || null,
+    };
+  }
+  return {
+    mode: 'disabled',
+    connected: false,
+    publicSignupUrl: signupUrls?.publicSignupUrl || null,
+    publicStaffUrl: signupUrls?.publicStaffUrl || null,
+    configPath: signupConfig?.configPath || null,
+    lastError: signupConfig
+      ? (signupUrls ? 'Relay offline or misconfigured — check relayApiUrl & relayApiKey' : 'signup-sync.json missing relayApiUrl or eventId')
+      : `No signup-sync.json found — create one at ${path.join(userDataPath, 'signup-sync.json')} (see docs/show-day-setup.md)`,
+  };
+});
+
+ipcMain.handle('ensure-guest-reference', (contactId) => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  const contact = (IN_MEMORY_DB.Contacts || []).find((c) => c.contact_id === contactId);
+  if (!contact) return null;
+  mobileSignupHandlers.ensureGuestReference(contact);
+  return contact;
+});
+
+ipcMain.handle('get-pending-mobile-signups', () => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  return mobileSignupHandlers.getPendingMobileSignups();
+});
+
+ipcMain.handle('confirm-mobile-signup', async (event, { contactId, staffName }) => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  const kioskLabel = getKioskId(event.sender);
+  const result = mobileSignupHandlers.confirmMobileSignup(contactId, kioskLabel, staffName || 'Staff');
+  if (result.remote_signup_id && mobileSignupSync) {
+    await mobileSignupSync.confirmRemoteSignup(result.remote_signup_id, staffName || 'Staff', kioskLabel);
+  }
+  broadcastMobileSignupUpdate();
+  return result;
+});
+
+ipcMain.handle('deny-mobile-signup', async (event, { contactId, staffName }) => {
+  if (!mobileSignupHandlers) initMobileSignup();
+  const kioskLabel = getKioskId(event.sender);
+  const result = mobileSignupHandlers.denyMobileSignup(contactId, kioskLabel, staffName || 'Staff');
+  if (result.remote_signup_id && mobileSignupSync) {
+    await mobileSignupSync.denyRemoteSignup(result.remote_signup_id, staffName || 'Staff', kioskLabel);
+  }
+  broadcastMobileSignupUpdate();
+  return result;
+});
+
 function createWindows() {
   loadStaffRoster();
   initDB(); // Load cache before windows open
+  initMobileSignup();
 
   // Security: Clear all local sessions on app boot to ensure every day starts fresh
   // This prevents "zombie logins" from the previous day
@@ -489,6 +632,8 @@ function createWindows() {
     
     windows.push(win);
   });
+
+  setTimeout(() => openCloudPagesOnLaunch(), 2000);
 }
 
 ipcMain.on('open-external', (event, url) => {

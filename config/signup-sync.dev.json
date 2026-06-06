@@ -1,0 +1,8 @@
+{
+  "eventId": "cannadelic-2026-06-06",
+  "relayApiUrl": "http://127.0.0.1:8787",
+  "relayApiKey": "dev-change-me-before-show",
+  "publicSignupUrl": "http://127.0.0.1:8787/signup/cannadelic-2026-06-06?title=Cannadelic%20Night%20Market",
+  "publicStaffUrl": "http://127.0.0.1:8787/staff/cannadelic-2026-06-06",
+  "syncIntervalMs": 4000
+}

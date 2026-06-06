@@ -1,27 +1,35 @@
 # Network & infrastructure
 
-## Deployment model: offline-first
+## Deployment model: offline-first + optional cloud sync
 
-The kiosk is designed to run **without internet**. No inbound or outbound application traffic is required for core features (registration, points, VIP, raffle, backups).
+Core kiosk features (registration at display, points, VIP, raffle, backups) run **without internet**. Mobile QR signups require **outbound HTTPS** to the cloud relay only.
+
+### Show-day without venue Wi‑Fi (recommended — Option A)
+
+Use a **staff phone hotspot** for the kiosk laptop + **Railway HTTPS relay** for guest phones on LTE.
+
+→ Full guide: [Hotspot show setup](./hotspot-show-setup.md)
 
 ```mermaid
 flowchart LR
-    subgraph Required["Required connectivity"]
-        NONE[None for app operation]
-    end
-    subgraph Optional["Optional — not required"]
-        WIFI[Wi-Fi / Ethernet]
-        UPD[Windows Update]
-        GIT[Git pull for updates]
-    end
+    Hotspot[Staff phone hotspot] -->|Wi‑Fi| Kiosk[Kiosk laptop]
+    Kiosk -->|HTTPS 443| Relay[Railway relay]
+    LTE[Guest phone LTE] -->|HTTPS 443| Relay
 ```
+
+| Device | Network | Required? |
+|--------|---------|-----------|
+| Kiosk laptop | Staff hotspot Wi‑Fi | Yes (for QR sync) |
+| Guest phones | LTE or any Wi‑Fi | No booth network needed |
+| Venue Wi‑Fi | — | **Not required** |
 
 ## Recommended network posture
 
 | Scenario | Recommendation |
 |----------|----------------|
-| Show floor (production) | Disconnect network cable / disable Wi-Fi **or** isolate on guest VLAN with **no route to corporate LAN** |
-| Dev / staging | Standard corporate network; no production PII on dev machines |
+| Show floor — **no venue Wi‑Fi** | Staff phone hotspot → kiosk; Railway relay for LTE guests — [hotspot guide](./hotspot-show-setup.md) |
+| Show floor — venue Wi‑Fi available | Kiosk on guest Wi‑Fi or hotspot; same Railway relay |
+| Dev / staging | `npm run dev` with local relay + cloudflared tunnel, or point at Railway |
 | Post-event data export | USB drive or approved secure file transfer — not email |
 
 ### Firewall (if kiosk stays online)
@@ -30,11 +38,14 @@ Allow only what IT explicitly needs:
 
 | Direction | Port | Purpose | Required? |
 |-----------|------|---------|-----------|
-| Outbound | 443 | Windows Update, optional GitLab | Optional |
-| Outbound | 53 | DNS | Only if online |
-| Inbound | — | **Deny all** to kiosk | Recommended |
+| Outbound | 443 | Mobile QR HTTPS relay (required) | **Yes** |
+| Outbound | 443 | Windows Update, GitLab | Optional |
+| Outbound | 53 | DNS | When online |
+| Inbound | — | **Deny all** to kiosk | **Deny** |
 
-No application listens on network ports.
+Phones and kiosks communicate via the **public HTTPS signup relay** — not direct LAN to the kiosk PC.
+
+See [Show-day setup](./show-day-setup.md) for mobile QR workflow.
 
 ## Hardware specification (reference)
 

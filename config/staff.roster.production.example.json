@@ -1,9 +1,7 @@
 [
-  { "name": "Amina", "pin": "REPLACE" },
-  { "name": "Jas", "pin": "REPLACE" },
-  { "name": "Ed", "pin": "REPLACE" },
-  { "name": "Jalen", "pin": "REPLACE" },
-  { "name": "Brandon", "pin": "REPLACE" },
-  { "name": "Stella", "pin": "REPLACE" },
-  { "name": "Amanda", "pin": "REPLACE" }
+  { "name": "Brandon", "pin": "0001" },
+  { "name": "Jalen", "pin": "0011" },
+  { "name": "Amanda", "pin": "0111" },
+  { "name": "Jasmine", "pin": "1111" },
+  { "name": "Edwin", "pin": "1000" }
 ]

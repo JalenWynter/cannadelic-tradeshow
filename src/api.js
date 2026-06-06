@@ -1,15 +1,31 @@
 // api.js - Final Multi-File Optimized Logic
 
+import { contactDisplayReference } from './guestReference.js';
+
 const api = {
   // --- Search & Fetch ---
   async getContactByEmail(email) { return await window.electronAPI.jsonGet('Contacts', { email: email.toLowerCase().trim() }); },
   async getContactByPhone(phone) { return await window.electronAPI.jsonGet('Contacts', { phone: phone.replace(/\D/g, '') }); },
   async getContactById(id) { return await window.electronAPI.jsonGet('Contacts', { contact_id: id }); },
   async getAllRecentContacts(limit = 50) { return await window.electronAPI.jsonQuery('Contacts', {}, limit); },
-  async searchContacts(searchTerm) {
+  async searchContacts(searchTerm, limit = 30) {
     const list = await window.electronAPI.jsonQuery('Contacts', {});
     const term = searchTerm.toLowerCase().trim();
-    return list.filter(c => c.name.toLowerCase().includes(term) || c.email.toLowerCase().includes(term) || c.phone.includes(term)).slice(0, 5);
+    if (!term) return [];
+    return list.filter((c) => {
+      const ref = (contactDisplayReference(c) || '').toLowerCase();
+      const name = (c.name || '').toLowerCase();
+      const email = (c.email || '').toLowerCase();
+      const phone = (c.phone || '').replace(/\D/g, '');
+      const termDigits = term.replace(/\D/g, '');
+      return (
+        name.includes(term)
+        || email.includes(term)
+        || (termDigits && phone.includes(termDigits))
+        || ref.includes(term)
+        || String(c.contact_id) === term
+      );
+    }).slice(0, limit);
   },
   async getEntryCount(contactId) { 
     const entries = await window.electronAPI.jsonQuery('GiveawayEntries', { contact_id: contactId }); 
@@ -52,6 +68,13 @@ const api = {
           const addedCount = mergedTickets.length - existingTickets.length;
           if (addedCount > 0) await this.addRaffleEntries(contact.contact_id, addedCount, 'Merged Physical Tickets');
         }
+      }
+      if (contact.mobile_signup_pending) {
+        await window.electronAPI.jsonRun('Contacts', 'update', {
+          mobile_signup_pending: false,
+          mobile_signup_confirmed: true,
+          mobile_signup_confirmed_at: new Date().toISOString(),
+        }, { contact_id: contact.contact_id });
       }
       return { contactId: contact.contact_id, isNew: false, contact };
     }
@@ -199,6 +222,39 @@ const api = {
   },
   async getBackupSize() {
     return await window.electronAPI.getBackupSize();
+  },
+  async getMobileSignupUrl() {
+    return await window.electronAPI.getMobileSignupUrl();
+  },
+  async getMobileSignupStatus() {
+    return await window.electronAPI.getMobileSignupStatus();
+  },
+  async getCloudStaffUrl() {
+    return await window.electronAPI.getCloudStaffUrl();
+  },
+  async openCloudStaffPage() {
+    return await window.electronAPI.openCloudStaffPage();
+  },
+  async getPendingMobileSignups() {
+    return await window.electronAPI.getPendingMobileSignups();
+  },
+  async confirmMobileSignup(contactId, staffName = 'Staff') {
+    return await window.electronAPI.confirmMobileSignup(contactId, staffName);
+  },
+  async denyMobileSignup(contactId, staffName = 'Staff') {
+    return await window.electronAPI.denyMobileSignup(contactId, staffName);
+  },
+  contactReference(contact) {
+    return contactDisplayReference(contact);
+  },
+  async ensureContactReference(contactId) {
+    return await window.electronAPI.ensureGuestReference(contactId);
+  },
+  isContactDeclined(contact) {
+    return Boolean(contact?.mobile_signup_denied || contact?.signup_status === 'declined');
+  },
+  onMobileSignupUpdate(callback) {
+    return window.electronAPI.onMobileSignupUpdate(callback);
   },
   async isTicketDuplicate(ticket, excludeContactId = null) {
     const allContacts = await window.electronAPI.jsonQuery('Contacts', {});

@@ -1,4 +1,7 @@
 [
-  { "name": "Staff Member One", "pin": "0000" },
-  { "name": "Staff Member Two", "pin": "0000" }
+  { "name": "Brandon", "pin": "0001" },
+  { "name": "Jalen", "pin": "0011" },
+  { "name": "Amanda", "pin": "0111" },
+  { "name": "Jasmine", "pin": "1111" },
+  { "name": "Edwin", "pin": "1000" }
 ]

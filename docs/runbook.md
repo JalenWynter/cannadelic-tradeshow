@@ -77,6 +77,14 @@
 | Data Health | ✅ Data Healthy | Run auto-fix or manual raffle adjustment |
 | Last Backup | Updates every ~5 min | See disk / permissions |
 | Backup size | Stable growth | Purge old backups manually if disk full |
+| Mobile QR sync | 🟢 Cloud sync live (LTE OK) | See [Show-day setup](./show-day-setup.md) |
+| Pending signups | Cleared after staff Approve | Verify guest info before approving |
+
+## Mobile QR signups (LTE)
+
+Full checklist: **[Show-day setup](./show-day-setup.md)**.
+
+Quick test: phone on LTE → scan Check-In QR → submit → pending card on Staff Dashboard within ~4s → Approve.
 
 ## Escalation
 

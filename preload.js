@@ -16,5 +16,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBackupSize: () => ipcRenderer.invoke('get-backup-size'),
   getStaffNames: () => ipcRenderer.invoke('get-staff-names'),
   validateStaffPin: (name, pin) => ipcRenderer.invoke('validate-staff-pin', { name, pin }),
-  openURL: (url) => ipcRenderer.send('open-external', url)
+  openURL: (url) => ipcRenderer.send('open-external', url),
+  getMobileSignupUrl: () => ipcRenderer.invoke('get-mobile-signup-url'),
+  getCloudStaffUrl: () => ipcRenderer.invoke('get-cloud-staff-url'),
+  openCloudStaffPage: () => ipcRenderer.invoke('open-cloud-staff-page'),
+  getMobileSignupStatus: () => ipcRenderer.invoke('get-mobile-signup-status'),
+  getPendingMobileSignups: () => ipcRenderer.invoke('get-pending-mobile-signups'),
+  confirmMobileSignup: (contactId, staffName) => ipcRenderer.invoke('confirm-mobile-signup', { contactId, staffName }),
+  denyMobileSignup: (contactId, staffName) => ipcRenderer.invoke('deny-mobile-signup', { contactId, staffName }),
+  ensureGuestReference: (contactId) => ipcRenderer.invoke('ensure-guest-reference', contactId),
+  onMobileSignupUpdate: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('mobile-signup-update', listener);
+    return () => ipcRenderer.removeListener('mobile-signup-update', listener);
+  },
 });

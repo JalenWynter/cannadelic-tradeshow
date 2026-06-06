@@ -1,0 +1,9 @@
+{
+  "eventId": "cannadelic-2026-06-06",
+  "relayApiUrl": "https://YOUR_RAILWAY_HOST",
+  "relayApiKey": "SAME_AS_RAILWAY_RELAY_API_KEY",
+  "publicSignupUrl": "https://YOUR_RAILWAY_HOST/signup/cannadelic-2026-06-06?title=Cannadelic%20Night%20Market",
+  "publicStaffUrl": "https://YOUR_RAILWAY_HOST/staff/cannadelic-2026-06-06",
+  "syncIntervalMs": 4000,
+  "_comment": "Copy to %AppData%\\gudessence-tradeshow-app\\signup-sync.json on show PC. See docs/hotspot-show-setup.md"
+}

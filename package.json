@@ -10,7 +10,9 @@
     "electron:dev": "electron src/main.js",
     "build": "vite build && vite build --mode electron-main",
     "preview": "npm run build && electron dist-electron/main.js",
-    "build:win": "npm run build && electron-builder --win"
+    "build:win": "npm run build && electron-builder --win",
+    "validate:show": "bash scripts/validate-show.sh",
+    "deploy:railway": "bash scripts/railway-phase1.sh"
   },
   "build": {
     "appId": "com.gudessence.tradeshow",
@@ -24,7 +26,8 @@
       "dist/**/*",
       "dist-electron/**/*",
       "preload.js",
-      "package.json"
+      "package.json",
+      "config/staff.roster.example.json"
     ],
     "directories": {
       "output": "release"
@@ -46,6 +49,8 @@
     "electron": "^41.1.1",
     "electron-builder": "^26.8.1",
     "vite": "^8.0.3",
-    "vite-plugin-electron": "^0.29.1"
+    "vite-plugin-electron": "^0.29.1",
+    "wait-on": "^9.0.10",
+    "@ngrok/ngrok": "^1.4.1"
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import api from './api';
@@ -37,7 +37,29 @@ class ErrorBoundary extends React.Component {
 
 // --- Keyboard Components ---
 
-const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = 'default', maxLength }) => {
+const clampKeyboardPosition = (x, y, width, height) => ({
+  x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
+  y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
+});
+
+const computeKeyboardPositionBelowAnchor = (anchorRect, keyboardWidth, keyboardHeight) => {
+  const gap = 14;
+  let x = anchorRect.left + (anchorRect.width / 2) - (keyboardWidth / 2);
+  let y = anchorRect.bottom + gap;
+
+  if (y + keyboardHeight > window.innerHeight - 8) {
+    y = anchorRect.top - keyboardHeight - gap;
+  }
+
+  return clampKeyboardPosition(x, y, keyboardWidth, keyboardHeight);
+};
+
+const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = 'default', maxLength, anchorRect }) => {
+  const keyboardRef = useRef(null);
+  const dragRef = useRef({ active: false, pointerId: null, offsetX: 0, offsetY: 0 });
+  const [position, setPosition] = useState(null);
+  const [positionReady, setPositionReady] = useState(!anchorRect);
+
   const layouts = {
     default: [
       ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
@@ -54,6 +76,75 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
       [onNext ? 'NEXT' : 'DONE']
     ]
   };
+
+  const handleDragStart = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    const el = keyboardRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const anchored = position ?? clampKeyboardPosition(rect.left, rect.top, rect.width, rect.height);
+    if (!position) setPosition(anchored);
+
+    dragRef.current = {
+      active: true,
+      pointerId: e.pointerId,
+      offsetX: e.clientX - anchored.x,
+      offsetY: e.clientY - anchored.y,
+    };
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+
+  const handleDragMove = (e) => {
+    if (!dragRef.current.active || dragRef.current.pointerId !== e.pointerId) return;
+    const el = keyboardRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    setPosition(clampKeyboardPosition(
+      e.clientX - dragRef.current.offsetX,
+      e.clientY - dragRef.current.offsetY,
+      rect.width,
+      rect.height
+    ));
+  };
+
+  const handleDragEnd = (e) => {
+    if (!dragRef.current.active || dragRef.current.pointerId !== e.pointerId) return;
+    dragRef.current = { active: false, pointerId: null, offsetX: 0, offsetY: 0 };
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  useLayoutEffect(() => {
+    const el = keyboardRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    if (anchorRect) {
+      setPosition(computeKeyboardPositionBelowAnchor(anchorRect, rect.width, rect.height));
+    } else {
+      setPosition(null);
+    }
+    setPositionReady(true);
+  }, [anchorRect, layout]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition((prev) => {
+        if (!prev) return prev;
+        const el = keyboardRef.current;
+        if (!el) return prev;
+        const rect = el.getBoundingClientRect();
+        return clampKeyboardPosition(prev.x, prev.y, rect.width, rect.height);
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleKey = (key) => {
     playSound('click');
@@ -75,12 +166,26 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
   };
 
   return (
-    <div className="keyboard-overlay" onClick={(e) => e.stopPropagation()}>
-      <div style={{ marginBottom: '15px', width: '100%', maxWidth: '850px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ color: 'var(--neon-lime)', fontWeight: 'bold', fontSize: '1rem' }}>
-          {layout === 'numeric' ? 'NUMERIC PAD' : 'TOUCH KEYBOARD'}
+    <div
+      ref={keyboardRef}
+      className={`keyboard-overlay${position ? ' keyboard-overlay--placed' : ''}${positionReady ? '' : ' keyboard-overlay--pending'}`}
+      style={position ? { left: position.x, top: position.y } : undefined}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="keyboard-header">
+        <div
+          className="keyboard-drag-handle"
+          onPointerDown={handleDragStart}
+          onPointerMove={handleDragMove}
+          onPointerUp={handleDragEnd}
+          onPointerCancel={handleDragEnd}
+        >
+          <span className="keyboard-drag-grip" aria-hidden="true">⋮⋮</span>
+          <span className="keyboard-drag-label">
+            {layout === 'numeric' ? 'NUMERIC PAD (DRAG TO MOVE)' : 'TOUCH KEYBOARD (DRAG TO MOVE)'}
+          </span>
         </div>
-        <button className="key key-special" style={{ minWidth: '80px', height: '35px', fontSize: '0.8rem' }} onClick={onClose}>HIDE</button>
+        <button className="key key-special keyboard-hide-btn" onClick={onClose}>HIDE</button>
       </div>
       
       {layout === 'numeric' ? (
@@ -205,7 +310,7 @@ const StaffApprovalModal = ({ isOpen, onClose, onApprove, actionName, onFocusInp
               placeholder="PIN" 
               value={pin} 
               readOnly
-              onClick={() => onFocusInput('numeric', pin, setPin, 4)}
+              onClick={(e) => onFocusInput('numeric', pin, setPin, 4, null, e.currentTarget)}
               style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '5px' }} 
               required 
             />
@@ -631,7 +736,7 @@ const ProductMenu = ({ onBack }) => {
       accent: "var(--electric-violet)",
       items: [
         { name: "CBD Facial Kit", price: "$72", status: "PREMIUM" }, { name: "CDB Lube", price: "$40" },
-        { name: "Facial Serum", price: "$40" }, { name: "Bath Bombs", price: "$17" },
+        { name: "Luminous Facial Serum", price: "$67" }, { name: "Bath Bombs", price: "$16" },
         { name: "Crystal Candle", price: "$17" }
       ]
     },
@@ -727,6 +832,270 @@ const ProductMenu = ({ onBack }) => {
   );
 };
 
+const MobileSignupPanel = ({ staffName = 'Staff', onApproved, onDeclined, onError, showQr = true, title = 'Skip the Line' }) => {
+  const [signupUrl, setSignupUrl] = useState('');
+  const [staffUrl, setStaffUrl] = useState('');
+  const [signupStatus, setSignupStatus] = useState(null);
+  const [pendingSignups, setPendingSignups] = useState([]);
+  const [confirmStep, setConfirmStep] = useState(null);
+  const [confirmingId, setConfirmingId] = useState(null);
+  const [showStaffQr, setShowStaffQr] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [url, status, list, staff] = await Promise.all([
+        api.getMobileSignupUrl(),
+        api.getMobileSignupStatus(),
+        api.getPendingMobileSignups(),
+        api.getCloudStaffUrl(),
+      ]);
+      setSignupUrl(url || '');
+      setStaffUrl(staff || '');
+      setSignupStatus(status);
+      setPendingSignups(list);
+    } catch (err) {
+      console.error('Mobile signup panel refresh failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const unsubscribe = api.onMobileSignupUpdate?.(() => refresh());
+    const interval = setInterval(refresh, 2000);
+    return () => {
+      clearInterval(interval);
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!confirmStep) return;
+    if (!pendingSignups.some((s) => s.contact_id === confirmStep.contactId)) {
+      setConfirmStep(null);
+      setConfirmingId(null);
+    }
+  }, [pendingSignups, confirmStep]);
+
+  useEffect(() => {
+    if (!signupStatus) return;
+    if (signupStatus.mode === 'cloud' && !signupStatus.connected) {
+      console.warn('Cloud relay offline:', signupStatus.lastError || 'check internet and signup-sync.json');
+    } else if (signupStatus.mode === 'disabled') {
+      console.warn('Mobile QR signup not configured — see signup-sync.json');
+    }
+    if (showQr && !signupUrl && signupStatus.lastError) {
+      console.warn('Guest signup QR unavailable:', signupStatus.lastError);
+    }
+  }, [signupStatus, signupUrl, showQr]);
+
+  const removePendingCard = (contactId) => {
+    setPendingSignups((prev) => prev.filter((s) => s.contact_id !== contactId));
+    setConfirmStep((prev) => (prev?.contactId === contactId ? null : prev));
+  };
+
+  const handleApprove = async (signup) => {
+    setConfirmingId(signup.contact_id);
+    setConfirmStep(null);
+    try {
+      await api.confirmMobileSignup(signup.contact_id, staffName);
+      playSound('confirm');
+      removePendingCard(signup.contact_id);
+      await refresh();
+      onApproved?.(signup);
+    } catch (err) {
+      playSound('error');
+      onError?.(err.message || 'Could not approve signup');
+      await refresh();
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
+  const handleDecline = async (signup) => {
+    setConfirmingId(signup.contact_id);
+    setConfirmStep(null);
+    try {
+      await api.denyMobileSignup(signup.contact_id, staffName);
+      playSound('confirm');
+      removePendingCard(signup.contact_id);
+      await refresh();
+      onDeclined?.(signup);
+    } catch (err) {
+      playSound('error');
+      onError?.(err.message || 'Could not decline signup');
+      await refresh();
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
+  const relayIcon = signupStatus?.mode === 'cloud'
+    ? (signupStatus.connected ? '🟢' : '🔴')
+    : null;
+
+  return (
+    <div className="card" style={{ margin: 0, textAlign: 'center' }}>
+      <h3 className="neon-text-violet" style={{ marginBottom: '8px', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+        {title}
+        {relayIcon && (
+          <span
+            title={signupStatus.connected ? 'Cloud relay online' : 'Cloud relay offline'}
+            style={{ fontSize: '0.85rem', lineHeight: 1 }}
+            aria-label={signupStatus.connected ? 'Cloud relay online' : 'Cloud relay offline'}
+          >
+            {relayIcon}
+          </span>
+        )}
+      </h3>
+
+      {staffUrl && (
+        <div style={{ marginBottom: '16px' }}>
+          <button
+            type="button"
+            className="btn btn-violet"
+            style={{ minWidth: 'auto', padding: '8px 16px', margin: 0, fontSize: '0.85rem' }}
+            onClick={() => { playSound('click'); setShowStaffQr((v) => !v); }}
+          >
+            {showStaffQr ? 'Hide Staff QR' : 'Staff Monitor'}
+          </button>
+          {showStaffQr && (
+            <div style={{
+              background: 'white',
+              padding: '16px',
+              borderRadius: '16px',
+              display: 'inline-block',
+              marginTop: '12px',
+              boxShadow: '0 0 30px rgba(204,255,0,0.25)',
+            }}>
+              <QRCodeCanvas value={staffUrl} size={180} level="M" includeMargin />
+            </div>
+          )}
+        </div>
+      )}
+
+      {showQr && signupUrl && (
+        <div style={{
+          background: 'white',
+          padding: '16px',
+          borderRadius: '16px',
+          display: 'inline-block',
+          marginBottom: '12px',
+          boxShadow: '0 0 30px rgba(204,255,0,0.25)',
+        }}>
+          <QRCodeCanvas value={signupUrl} size={180} level="M" includeMargin />
+        </div>
+      )}
+
+      <div style={{ textAlign: 'left', borderTop: '1px solid var(--glass-border)', paddingTop: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h4 className="neon-text-lime" style={{ margin: 0, fontSize: '0.95rem' }}>Pending Phone Signups</h4>
+          <span style={{ fontSize: '0.75rem', opacity: 0.5 }}>{pendingSignups.length} waiting</span>
+        </div>
+
+        {pendingSignups.length === 0 ? (
+          <p style={{ opacity: 0.5, fontSize: '0.85rem', textAlign: 'center', padding: '16px 0' }}>
+            No pending signups. Display the QR near the line.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '360px', overflowY: 'auto' }}>
+            {pendingSignups.map((signup) => (
+              <div
+                key={signup.contact_id}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(204,255,0,0.25)',
+                  background: 'rgba(204,255,0,0.04)',
+                }}
+              >
+                {confirmStep?.contactId === signup.contact_id ? (
+                  <div style={{ marginTop: '10px', padding: '10px', borderRadius: '8px', border: `1px solid ${confirmStep.action === 'decline' ? 'rgba(255,80,80,0.45)' : 'rgba(255,0,127,0.35)'}`, background: confirmStep.action === 'decline' ? 'rgba(255,80,80,0.1)' : 'rgba(255,0,127,0.08)' }}>
+                    <p style={{ fontSize: '0.8rem', margin: '0 0 10px', lineHeight: 1.45 }}>
+                      <strong>Are you sure?</strong>{' '}
+                      {confirmStep.action === 'decline'
+                        ? <>Decline <strong>{signup.name}</strong>{signup.guest_reference ? <> ({signup.guest_reference})</> : null} and mark as declined in attendee list.</>
+                        : <>Verify <strong>{signup.name}</strong>{signup.guest_reference ? <> ({signup.guest_reference})</> : null} matches the guest in front of you.</>}
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          minWidth: 'auto',
+                          padding: '8px 14px',
+                          margin: 0,
+                          fontSize: '0.8rem',
+                          flex: 1,
+                          background: confirmStep.action === 'decline' ? '#ff6b6b' : undefined,
+                          border: confirmStep.action === 'decline' ? 'none' : undefined,
+                          color: confirmStep.action === 'decline' ? '#fff' : undefined,
+                        }}
+                        disabled={confirmingId === signup.contact_id}
+                        onClick={() => (confirmStep.action === 'decline' ? handleDecline(signup) : handleApprove(signup))}
+                      >
+                        {confirmingId === signup.contact_id ? '...' : confirmStep.action === 'decline' ? 'Yes, decline' : 'Yes, approve'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ minWidth: 'auto', padding: '8px 14px', margin: 0, fontSize: '0.8rem', flex: 1 }}
+                        onClick={() => { playSound('click'); setConfirmStep(null); }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      {(signup.guest_reference || signup.display_id) && (
+                        <div style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--cyber-lime)', fontSize: '0.8rem', marginBottom: '4px' }}>
+                          {signup.guest_reference || signup.display_id}
+                        </div>
+                      )}
+                      <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{signup.name}</div>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px' }}>
+                        {signup.email && <div>✉ {signup.email}</div>}
+                        {signup.phone && <div>☎ {signup.phone}</div>}
+                        <div style={{ marginTop: '4px', color: 'var(--cyber-pink)' }}>
+                          Status: PENDING · {signup.is_new ? 'New guest' : 'Returning'}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn btn-lime"
+                        style={{ minWidth: 'auto', padding: '8px 14px', margin: 0, fontSize: '0.8rem' }}
+                        onClick={() => { playSound('click'); setConfirmStep({ contactId: signup.contact_id, action: 'approve' }); }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ minWidth: 'auto', padding: '8px 14px', margin: 0, fontSize: '0.8rem', background: 'rgba(255,80,80,0.15)', border: '1px solid rgba(255,80,80,0.45)', color: '#ff8a8a' }}
+                        onClick={() => { playSound('click'); setConfirmStep({ contactId: signup.contact_id, action: 'decline' }); }}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {confirmStep?.contactId !== signup.contact_id && (
+                  <p style={{ fontSize: '0.65rem', opacity: 0.45, margin: '8px 0 0' }}>
+                    Verify name, email, and phone match the guest before approving or declining.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const CheckIn = ({ onBack, onSuccess, onFocusInput }) => {
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [ticketNumbers, setTicketNumbers] = useState(['']);
@@ -775,86 +1144,102 @@ const CheckIn = ({ onBack, onSuccess, onFocusInput }) => {
   };
 
   return (
-    <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
+    <div className="view-container" style={{ padding: '40px 30px', overflowY: 'auto' }}>
       <button className="btn" onClick={() => { playSound('click'); onBack(); }} style={{ background: 'transparent' }}>← Back</button>
-      <h2 className="neon-text-lime" style={{ marginBottom: '40px', textAlign: 'center' }}>Check-In / Register</h2>
-      <form onSubmit={handleSubmit} className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <p style={{ marginBottom: '20px', opacity: 0.7, textAlign: 'center' }}>Enter your info. If you've been here before, we'll find you!</p>
-        {error && <p style={{ color: 'var(--cyber-pink)', marginBottom: '20px', textAlign: 'center' }}>{error}</p>}
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <div className="input-group">
-            <label className="input-label">First Name</label>
-            <input 
-              type="text" 
-              value={formData.firstName} 
-              readOnly 
-              placeholder="Required"
-              onClick={() => onFocusInput('default', formData.firstName, (v) => setFormData(prev => ({...prev, firstName: v})), null, () => document.getElementById('last-name-input').click())} 
-            />
-          </div>
-          <div className="input-group">
-            <label className="input-label">Last Name</label>
-            <input 
-              id="last-name-input"
-              type="text" 
-              value={formData.lastName} 
-              readOnly 
-              placeholder="Optional"
-              onClick={() => onFocusInput('default', formData.lastName, (v) => setFormData(prev => ({...prev, lastName: v})), null, () => document.getElementById('email-input').click())} 
-            />
-          </div>
-        </div>
+      <h2 className="neon-text-lime" style={{ marginBottom: '30px', textAlign: 'center' }}>Check-In / Register</h2>
 
-        <div className="input-group">
-          <label className="input-label">Email Address</label>
-          <input 
-            id="email-input"
-            type="email" 
-            value={formData.email} 
-            readOnly 
-            placeholder="Required" 
-            onClick={() => onFocusInput('default', formData.email, (v) => setFormData(prev => ({...prev, email: v})), null, () => document.getElementById('phone-input').click())} 
-          />
-        </div>
-        <div className="input-group">
-          <label className="input-label">Phone Number</label>
-          <input 
-            id="phone-input"
-            type="tel" 
-            value={formData.phone} 
-            readOnly 
-            placeholder="Required" 
-            onClick={() => onFocusInput('numeric', formData.phone, (v) => setFormData(prev => ({...prev, phone: v})), 10, () => document.getElementById('ticket-0').click())} 
-          />
-        </div>
-
-        <div style={{ marginTop: '20px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
-          <label className="input-label" style={{ color: 'var(--neon-lime)' }}>Physical Ticket Numbers (6 Digits)</label>
-          {ticketNumbers.map((num, i) => (
-            <div key={i} className="input-group" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+        gap: '28px',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        alignItems: 'start',
+      }}>
+        <form onSubmit={handleSubmit} className="card" style={{ margin: 0 }}>
+          <p style={{ marginBottom: '20px', opacity: 0.7, textAlign: 'center' }}>Enter your info at the kiosk. If you've been here before, we'll find you!</p>
+          {error && <p style={{ color: 'var(--cyber-pink)', marginBottom: '20px', textAlign: 'center' }}>{error}</p>}
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div className="input-group">
+              <label className="input-label">First Name</label>
               <input 
-                id={`ticket-${i}`}
                 type="text" 
-                value={num} 
+                value={formData.firstName} 
                 readOnly 
-                placeholder={`Ticket #${i+1}`} 
-                style={{ letterSpacing: '3px', fontWeight: 'bold' }}
-                onClick={() => onFocusInput('numeric', num, (v) => updateTicket(i, v), 6)} 
+                placeholder="Required"
+                onClick={(e) => onFocusInput('default', formData.firstName, (v) => setFormData(prev => ({...prev, firstName: v})), null, () => document.getElementById('last-name-input').click(), e.currentTarget)} 
               />
-              {ticketNumbers.length > 1 && (
-                <button type="button" className="btn" style={{ minWidth: '50px', padding: '10px', margin: 0, background: 'rgba(255,0,0,0.2)', border: '1px solid red' }} onClick={() => setTicketNumbers(ticketNumbers.filter((_, idx) => idx !== i))}>✕</button>
-              )}
             </div>
-          ))}
-          {ticketNumbers.length < 10 && (
-            <button type="button" className="btn" style={{ width: '100%', margin: '10px 0', background: 'rgba(255,255,255,0.05)', border: '1px dashed var(--neon-lime)', fontSize: '0.9rem' }} onClick={handleAddTicket}>+ Add Another Ticket</button>
-          )}
-        </div>
+            <div className="input-group">
+              <label className="input-label">Last Name</label>
+              <input 
+                id="last-name-input"
+                type="text" 
+                value={formData.lastName} 
+                readOnly 
+                placeholder="Optional"
+                onClick={(e) => onFocusInput('default', formData.lastName, (v) => setFormData(prev => ({...prev, lastName: v})), null, () => document.getElementById('email-input').click(), e.currentTarget)} 
+              />
+            </div>
+          </div>
 
-        <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '20px', textAlign: 'center' }}>Provide Email or Phone to check existing accounts.</p>
-        <div style={{ marginTop: '30px', textAlign: 'center' }}><button type="submit" className="btn btn-lime" onClick={() => playSound('click')}>Proceed</button></div>
-      </form>
+          <div className="input-group">
+            <label className="input-label">Email Address</label>
+            <input 
+              id="email-input"
+              type="email" 
+              value={formData.email} 
+              readOnly 
+              placeholder="Required" 
+              onClick={(e) => onFocusInput('default', formData.email, (v) => setFormData(prev => ({...prev, email: v})), null, () => document.getElementById('phone-input').click(), e.currentTarget)} 
+            />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Phone Number</label>
+            <input 
+              id="phone-input"
+              type="tel" 
+              value={formData.phone} 
+              readOnly 
+              placeholder="Required" 
+              onClick={(e) => onFocusInput('numeric', formData.phone, (v) => setFormData(prev => ({...prev, phone: v})), 10, () => document.getElementById('ticket-0').click(), e.currentTarget)} 
+            />
+          </div>
+
+          <div style={{ marginTop: '20px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
+            <label className="input-label" style={{ color: 'var(--neon-lime)' }}>Physical Ticket Numbers (6 Digits)</label>
+            {ticketNumbers.map((num, i) => (
+              <div key={i} className="input-group" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input 
+                  id={`ticket-${i}`}
+                  type="text" 
+                  value={num} 
+                  readOnly 
+                  placeholder={`Ticket #${i+1}`} 
+                  style={{ letterSpacing: '3px', fontWeight: 'bold' }}
+                  onClick={(e) => onFocusInput('numeric', num, (v) => updateTicket(i, v), 6, null, e.currentTarget)} 
+                />
+                {ticketNumbers.length > 1 && (
+                  <button type="button" className="btn" style={{ minWidth: '50px', padding: '10px', margin: 0, background: 'rgba(255,0,0,0.2)', border: '1px solid red' }} onClick={() => setTicketNumbers(ticketNumbers.filter((_, idx) => idx !== i))}>✕</button>
+                )}
+              </div>
+            ))}
+            {ticketNumbers.length < 10 && (
+              <button type="button" className="btn" style={{ width: '100%', margin: '10px 0', background: 'rgba(255,255,255,0.05)', border: '1px dashed var(--neon-lime)', fontSize: '0.9rem' }} onClick={handleAddTicket}>+ Add Another Ticket</button>
+            )}
+          </div>
+
+          <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '20px', textAlign: 'center' }}>Provide Email or Phone to check existing accounts.</p>
+          <div style={{ marginTop: '30px', textAlign: 'center' }}><button type="submit" className="btn btn-lime" onClick={() => playSound('click')}>Proceed</button></div>
+        </form>
+
+        <MobileSignupPanel
+          staffName="Kiosk"
+          onApproved={(signup) => onSuccess(signup.contact_id, signup.is_new, signup.name)}
+          onError={(msg) => setError(msg)}
+        />
+      </div>
     </div>
   );
 };
@@ -897,7 +1282,7 @@ const Profile = ({ contactId, onNavigate }) => {
   }, [contactId, onNavigate]);
 
   const load = async () => {
-    const c = await api.getContactById(contactId);
+    const c = await api.ensureContactReference(contactId) || await api.getContactById(contactId);
     setContact(c);
     setEntries(await api.getEntryCount(contactId));
     setActions(await api.getCompletedActions(contactId));
@@ -928,7 +1313,12 @@ const Profile = ({ contactId, onNavigate }) => {
       <div style={{ maxWidth: '800px', margin: '0 auto' }}>
         <div className="card" style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h2 className="neon-text-lime" style={{ fontSize: '2.5rem' }}>{contact.name}</h2>
-          <p style={{ opacity: 0.7 }}>Attendee ID: #{contact.contact_id}</p>
+          <p style={{ opacity: 0.7 }}>
+            Reference:{' '}
+            <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--neon-lime)' }}>
+              {api.contactReference(contact) || '—'}
+            </span>
+          </p>
           
           <div style={{ display: 'flex', gap: '20px', margin: '30px 0' }}>
               <div className="card" style={{ flex: 1, background: 'rgba(139, 0, 255, 0.05)', border: '1px solid var(--electric-violet)' }}>
@@ -1100,7 +1490,7 @@ const GiveawayEntry = ({ contactId, onNavigate, onSuccess, setNotify, onFocusInp
                 placeholder="Search..." 
                 value={search} 
                 readOnly
-                onClick={() => onFocusInput('default', search, handleSearch)}
+                onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
                 autoFocus 
               />
             </div>
@@ -1242,7 +1632,7 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, staffNames 
                     placeholder="Search..." 
                     value={search} 
                     readOnly
-                    onClick={() => onFocusInput('default', search, handleSearch)}
+                    onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
                   />
                 </div>
                 {searchResults.map(c => (
@@ -1310,7 +1700,7 @@ const StaffLogin = ({ onBack, onLoginSuccess, onFocusInput, setNotify, staffName
               placeholder="PIN" 
               value={pin} 
               readOnly
-              onClick={() => onFocusInput('numeric', pin, setPin, 4)}
+              onClick={(e) => onFocusInput('numeric', pin, setPin, 4, null, e.currentTarget)}
               style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '5px' }} 
             />
           </div>
@@ -1322,7 +1712,24 @@ const StaffLogin = ({ onBack, onLoginSuccess, onFocusInput, setNotify, staffName
   );
 };
 
-const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
+const StaffQrApprovals = ({ onBack, staffName, setNotify }) => (
+  <div className="view-container" style={{ padding: '40px 30px', overflowY: 'auto' }}>
+    <button className="btn" onClick={() => { playSound('click'); onBack(); }} style={{ background: 'transparent' }}>← Back to Dashboard</button>
+    <h2 className="neon-text-lime" style={{ textAlign: 'center', margin: '20px 0 24px' }}>QR Signup Approvals</h2>
+    <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+      <MobileSignupPanel
+        staffName={staffName}
+        showQr={false}
+        title="Pending Phone Signups"
+        onApproved={() => setNotify({ message: 'Approved. Guest saved to kiosk database.', type: 'success' })}
+        onDeclined={() => setNotify({ message: 'Signup marked as declined. Still visible in Attendee Management.', type: 'success' })}
+        onError={(msg) => setNotify({ message: msg, type: 'error' })}
+      />
+    </div>
+  </div>
+);
+
+const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput, onNavigate }) => {
   const [contacts, setContacts] = useState([]);
   const [raffleModal, setRaffleModal] = useState(null);
   const [showWipe, setShowWipe] = useState(false);
@@ -1344,11 +1751,13 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
   const [supportModal, setSupportModal] = useState(null); // { id, name }
   const [redemptionModal, setRedemptionModal] = useState(null); // { id, name, currentPoints, isVip }
   const [ticketViewModal, setTicketViewModal] = useState(null); // { name, tickets }
+  const [attendeeDetailModal, setAttendeeDetailModal] = useState(null);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
   const [ticketCategory, setTicketCategory] = useState('Ticketing');
   const [allTickets, setAllTickets] = useState([]);
   const [showTickets, setShowTickets] = useState(false);
+  const [pendingQrCount, setPendingQrCount] = useState(0);
 
   const loadData = async () => {
     // Stats
@@ -1375,6 +1784,13 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
     } else {
       list = await api.getAllRecentContacts(50);
     }
+
+    await Promise.all((list || []).map(async (c) => {
+      if (!api.contactReference(c)) {
+        const updated = await api.ensureContactReference(c.contact_id);
+        if (updated) Object.assign(c, updated);
+      }
+    }));
     
     const withCounts = await Promise.all((list || []).map(async c => {
       const actions = await api.getCompletedActions(c.contact_id);
@@ -1397,6 +1813,10 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
       filtered = withCounts.filter(c => c.actionCount > 1 || c.total_points > 10);
     } else if (activeFilter === 'voted') {
       filtered = withCounts.filter(c => c.voted);
+    } else if (activeFilter === 'declined') {
+      filtered = withCounts.filter(c => api.isContactDeclined(c));
+    } else if (activeFilter === 'not-declined') {
+      filtered = withCounts.filter(c => !api.isContactDeclined(c));
     }
 
     setContacts(filtered);
@@ -1411,9 +1831,21 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
       if (c.entries < physicalCount) issues++;
     }
     setHealthStatus(issues > 0 ? `⚠️ ${issues} inconsistencies` : '✅ Data Healthy');
+
+    try {
+      const pending = await api.getPendingMobileSignups();
+      setPendingQrCount(pending.length);
+    } catch {
+      setPendingQrCount(0);
+    }
   };
 
   useEffect(() => { loadData(); }, [searchTerm, activeFilter]);
+
+  useEffect(() => {
+    const unsub = api.onMobileSignupUpdate?.(() => loadData());
+    return () => { if (typeof unsub === 'function') unsub(); };
+  }, [searchTerm, activeFilter]);
 
   // Timer Effect
   useEffect(() => {
@@ -1517,10 +1949,17 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
 
   return (
     <div className="view-container" style={{ padding: '50px', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 className="neon-text-pink">Staff Dashboard</h2>
           <p>Staff Member: <strong>{staffName}</strong></p>
+          <button
+            className="btn btn-lime"
+            style={{ marginTop: '12px', minWidth: 'auto' }}
+            onClick={() => { playSound('click'); onNavigate('staff-qr-queue'); }}
+          >
+            📱 QR Approvals{pendingQrCount > 0 ? ` (${pendingQrCount})` : ''}
+          </button>
         </div>
         <div className="card" style={{ padding: '15px 25px', border: '1px solid var(--neon-lime)', background: 'rgba(204,255,0,0.05)', display: 'flex', gap: '30px' }}>
           <div>
@@ -1563,6 +2002,50 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
           <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>Avg. Entries/User</div>
         </div>
       </div>
+
+      <div style={{ marginTop: '24px', maxWidth: '900px' }}>
+        <p style={{ fontSize: '0.85rem', opacity: 0.6, marginBottom: '12px' }}>
+          Quick view. Use <strong>📱 QR Approvals</strong> above for full screen approve workflow.
+        </p>
+        <MobileSignupPanel
+          staffName={staffName}
+          showQr={false}
+          title="Pending QR Signups (preview)"
+          onApproved={() => { setNotify({ message: 'Signup approved and saved.', type: 'success' }); loadData(); }}
+          onDeclined={() => { setNotify({ message: 'Signup marked as declined. Still visible in Attendee Management.', type: 'success' }); loadData(); }}
+          onError={(msg) => setNotify({ message: msg, type: 'error' })}
+        />
+      </div>
+
+      {attendeeDetailModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
+          <div className="card" style={{ width: '460px', maxWidth: '92vw' }}>
+            <h3 className="neon-text-lime" style={{ marginBottom: '4px' }}>{attendeeDetailModal.name}</h3>
+            <p style={{ opacity: 0.6, fontSize: '0.85rem', margin: '0 0 16px', fontFamily: 'ui-monospace, monospace' }}>
+              {api.contactReference(attendeeDetailModal) || '—'}
+            </p>
+            <div style={{ display: 'grid', gap: '12px', fontSize: '0.95rem', lineHeight: 1.5 }}>
+              <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Email</span>{attendeeDetailModal.email || '—'}</div>
+              <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Phone</span>{attendeeDetailModal.phone || '—'}</div>
+              <div>
+                <span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>QR Signup Status</span>
+                {api.isContactDeclined(attendeeDetailModal) ? 'Declined' : attendeeDetailModal.mobile_signup_confirmed || attendeeDetailModal.signup_status === 'approved' ? 'Approved' : attendeeDetailModal.mobile_signup_pending ? 'Pending' : '—'}
+              </div>
+              {attendeeDetailModal.mobile_signup_at && (
+                <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Signed Up</span>{api.formatCivilianTime(attendeeDetailModal.mobile_signup_at)}</div>
+              )}
+              {attendeeDetailModal.mobile_signup_confirmed_at && (
+                <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Approved</span>{api.formatCivilianTime(attendeeDetailModal.mobile_signup_confirmed_at)}{attendeeDetailModal.mobile_signup_confirmed_by_staff ? ` by ${attendeeDetailModal.mobile_signup_confirmed_by_staff}` : ''}</div>
+              )}
+              {attendeeDetailModal.mobile_signup_denied_at && (
+                <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Declined</span>{api.formatCivilianTime(attendeeDetailModal.mobile_signup_denied_at)}{attendeeDetailModal.mobile_signup_denied_by_staff ? ` by ${attendeeDetailModal.mobile_signup_denied_by_staff}` : ''}</div>
+              )}
+              <div><span style={{ opacity: 0.55, display: 'block', fontSize: '0.75rem' }}>Points / Entries</span>{attendeeDetailModal.total_points} pts · {attendeeDetailModal.entries ?? 0} entries</div>
+            </div>
+            <button className="btn btn-lime" style={{ width: '100%', marginTop: '20px' }} onClick={() => { playSound('click'); setAttendeeDetailModal(null); }}>Close</button>
+          </div>
+        </div>
+      )}
 
       {raffleModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
@@ -1720,7 +2203,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
                 placeholder="PIN" 
                 value={wipePin1} 
                 readOnly 
-                onClick={() => onFocusInput('numeric', wipePin1, setWipePin1, 4)}
+                onClick={(e) => onFocusInput('numeric', wipePin1, setWipePin1, 4, null, e.currentTarget)}
               />
             </div>
             <div className="input-group">
@@ -1729,7 +2212,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
                 placeholder="Confirm PIN" 
                 value={wipePin2} 
                 readOnly 
-                onClick={() => onFocusInput('numeric', wipePin2, setWipePin2, 4)}
+                onClick={(e) => onFocusInput('numeric', wipePin2, setWipePin2, 4, null, e.currentTarget)}
               />
             </div>
             <button className="btn" style={{ background: 'white', color: 'red' }} onClick={() => { playSound('error'); handleWipe(); }}>ERASE ALL</button>
@@ -1748,10 +2231,11 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
           </div>
           <input 
             type="text" 
-            placeholder="Search attendees..." 
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '10px 20px', borderRadius: '10px', color: 'white', width: '300px' }}
+            placeholder="Search name, email, phone, or reference (e.g. CND-00007)..." 
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '10px 20px', borderRadius: '10px', color: 'white', width: '360px' }}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={() => onFocusInput?.(searchTerm, (val) => setSearchTerm(val))}
           />
         </div>
 
@@ -1759,6 +2243,8 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
           {[
             { id: 'all', label: 'All Attendees' },
+            { id: 'not-declined', label: 'Not Declined' },
+            { id: 'declined', label: 'Declined QR' },
             { id: 'new', label: 'New/Inactive' },
             { id: 'vip', label: 'VIP Members' },
             { id: 'engaged', label: 'Engaged (Active)' },
@@ -1786,15 +2272,56 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
         </div>
 
         <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border)', opacity: 0.7, fontSize: '0.9rem' }}>
-              <th>Name</th><th>Points</th><th>Total Tickets</th><th>VIP</th><th>🌸</th><th>🗳️</th><th>🇨🇴</th><th>Action</th>
+              <th>Reference</th><th>Status</th><th>Name</th><th>Points</th><th>Total Tickets</th><th>VIP</th><th>🌸</th><th>🗳️</th><th>🇨🇴</th><th>Action</th>
             </tr>
           </thead>
-          <tbody>{contacts.map(c => (
-            <tr key={c.contact_id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-              <td>{c.name}</td><td>{c.total_points}</td>
+          <tbody>{contacts.map(c => {
+            const declined = api.isContactDeclined(c);
+            return (
+            <tr key={c.contact_id} style={{ borderBottom: '1px solid var(--glass-border)', opacity: declined ? 0.5 : 1, background: declined ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+              <td
+                style={{
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: '0.8rem',
+                  color: api.contactReference(c) ? (declined ? 'rgba(255,255,255,0.45)' : 'var(--neon-lime)') : 'rgba(255,255,255,0.35)',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  textDecorationColor: 'rgba(204,255,0,0.35)',
+                }}
+                title="View contact details"
+                onClick={async () => {
+                  playSound('click');
+                  const full = await api.ensureContactReference(c.contact_id);
+                  setAttendeeDetailModal(full || c);
+                }}
+              >
+                {api.contactReference(c) || '—'}
+              </td>
+              <td>
+                {declined ? (
+                  <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 'bold', background: 'rgba(255,80,80,0.15)', color: '#ff6b6b' }}>DECLINED</span>
+                ) : c.mobile_signup_confirmed || c.signup_status === 'approved' ? (
+                  <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 'bold', background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>APPROVED</span>
+                ) : c.mobile_signup_pending ? (
+                  <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 'bold', background: 'rgba(255,0,127,0.12)', color: '#ff007f' }}>PENDING</span>
+                ) : (
+                  <span style={{ opacity: 0.35, fontSize: '0.75rem' }}>—</span>
+                )}
+              </td>
+              <td
+                style={{ color: declined ? 'rgba(255,255,255,0.55)' : 'inherit', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.25)' }}
+                title="View contact details"
+                onClick={async () => {
+                  playSound('click');
+                  const full = await api.ensureContactReference(c.contact_id);
+                  setAttendeeDetailModal(full || c);
+                }}
+              >
+                {c.name}
+              </td><td>{c.total_points}</td>
               <td 
                 style={{ cursor: c.physical_tickets?.length > 0 ? 'pointer' : 'default' }} 
                 onClick={() => { if (c.physical_tickets?.length > 0) { playSound('click'); setTicketViewModal({ name: c.name, tickets: c.physical_tickets }); } }}
@@ -1812,7 +2339,7 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
                 <button className="btn" style={{ minWidth: 'auto', padding: '5px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid gray' }} onClick={() => setSupportModal({ id: c.contact_id, name: c.name })}>💬 Support</button>
               </td>
             </tr>
-          ))}</tbody>
+          );})}</tbody>
           </table>
         </div>
       </div>
@@ -1834,9 +2361,11 @@ const StaffDashboard = ({ onLogout, staffName, setNotify, onFocusInput }) => {
                   <td><strong>{log.staff_name}</strong></td>
                   <td><span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>{log.type}</span></td>
                   <td style={{ opacity: 0.8 }}>
+                    {log.contact_name ? <span>{log.contact_name}{log.guest_reference ? ` (${log.guest_reference})` : ''}</span> : null}
                     {log.count ? `${log.count} entries` : ''}
                     {log.item ? log.item : ''}
                     {log.points_deducted ? `${log.points_deducted} pts` : ''}
+                    {!log.contact_name && !log.count && !log.item && !log.points_deducted ? '—' : ''}
                   </td>
                 </tr>
               ))}
@@ -1909,7 +2438,7 @@ const AddTicket = ({ onBack, setNotify, onFocusInput, currentContactId }) => {
               placeholder="Name, Email, or Phone..." 
               value={search} 
               readOnly
-              onClick={() => onFocusInput('default', search, handleSearch)}
+                    onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
             />
           </div>
           <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
@@ -1933,7 +2462,7 @@ const AddTicket = ({ onBack, setNotify, onFocusInput, currentContactId }) => {
               value={ticketNumber} 
               readOnly
               style={{ textAlign: 'center', fontSize: '2rem', letterSpacing: '8px', fontWeight: 'bold' }}
-              onClick={() => onFocusInput('numeric', ticketNumber, setTicketNumber, 6, handleSubmit)}
+              onClick={(e) => onFocusInput('numeric', ticketNumber, setTicketNumber, 6, handleSubmit, e.currentTarget)}
             />
           </div>
 
@@ -2072,7 +2601,7 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
         <div className="card" style={{ textAlign: 'center', border: '2px solid var(--electric-violet)', background: 'rgba(139, 0, 255, 0.05)' }}>
           <h3 className="neon-text-violet" style={{ fontSize: '1.8rem', marginBottom: '15px' }}>JOIN THE ADVENTURE</h3>
           <p style={{ marginBottom: '30px', opacity: 0.8, maxWidth: '600px', margin: '0 auto 30px auto' }}>
-            Secure your early bird discount. Reserve your spot on our upcoming luxury retreat to Colombia. No payment required today—just your interest!
+            Secure your early bird discount. Reserve your spot on our upcoming luxury retreat to Colombia. No payment required today, just your interest!
           </p>
           
           {signedUp ? (
@@ -2186,7 +2715,7 @@ const App = () => {
   const [showVipModal, setShowVipModal] = useState(false);
   const [notify, setNotify] = useState(null);
   const [logoutCountdown, setLogoutCountdown] = useState(null);
-  const [keyboard, setKeyboard] = useState({ isOpen: false, type: 'default', value: '', callback: null, nextCallback: null, maxLength: null });
+  const [keyboard, setKeyboard] = useState({ isOpen: false, type: 'default', value: '', callback: null, nextCallback: null, maxLength: null, anchorRect: null });
   
   const idleTimer = useRef(null);
   const countdownInterval = useRef(null);
@@ -2313,8 +2842,9 @@ const App = () => {
     resetIdleTimer(); 
   };
 
-  const openKeyboard = (type, value, callback, maxLength = null, nextCallback = null) => {
-    setKeyboard({ isOpen: true, type, value, callback, maxLength, nextCallback });
+  const openKeyboard = (type, value, callback, maxLength = null, nextCallback = null, anchorEl = null) => {
+    const anchorRect = anchorEl?.getBoundingClientRect?.() ?? null;
+    setKeyboard({ isOpen: true, type, value, callback, maxLength, nextCallback, anchorRect });
   };
 
   const handleToggleFullscreen = async () => {
@@ -2364,7 +2894,8 @@ const App = () => {
         {view === 'vip' && <VipLounge onNavigate={navigate} onSuccess={setCurrentContactId} setNotify={setNotify} onFocusInput={openKeyboard} staffNames={staffNames} />}
         
         {view === 'staff-login' && <StaffLogin onBack={() => navigate('home')} onLoginSuccess={(name) => { setActiveStaff(name); navigate('staff-dashboard'); }} onFocusInput={openKeyboard} setNotify={setNotify} staffNames={staffNames} />}
-        {view === 'staff-dashboard' && <StaffDashboard onLogout={() => { setActiveStaff(null); navigate('home'); }} staffName={activeStaff} setNotify={setNotify} onFocusInput={openKeyboard} />}
+        {view === 'staff-dashboard' && <StaffDashboard onLogout={() => { setActiveStaff(null); navigate('home'); }} staffName={activeStaff} setNotify={setNotify} onFocusInput={openKeyboard} onNavigate={navigate} />}
+        {view === 'staff-qr-queue' && activeStaff && <StaffQrApprovals onBack={() => navigate('staff-dashboard')} staffName={activeStaff} setNotify={setNotify} />}
         
         {view !== 'home' && view !== 'thank-you' && (
           <div style={{ position: 'fixed', bottom: '20px', left: '20px' }}>
@@ -2401,6 +2932,7 @@ const App = () => {
             layout={keyboard.type} 
             value={keyboard.value} 
             maxLength={keyboard.maxLength}
+            anchorRect={keyboard.anchorRect}
             onNext={keyboard.nextCallback}
             onChange={(v) => {
               setKeyboard({ ...keyboard, value: v });

@@ -10,6 +10,9 @@ Documentation for systems engineering, networking, and internal IT teams operati
 | [Security](./security.md) | Security / IT | Threat model, controls, secrets |
 | [Network & infrastructure](./network-infrastructure.md) | Network / IT | Offline operation, firewall, endpoints |
 | [Deployment](./deployment.md) | Ops | Build, install, show-day checklist |
+| [Show-day setup](./show-day-setup.md) | Ops / on-site IT | Mobile QR (LTE), dual kiosk, pre-show checks |
+| [Hotspot show setup](./hotspot-show-setup.md) | Ops / on-site IT | **No venue Wi‑Fi** — phone hotspot + Railway (Option A) |
+| [Railway deploy](./railway-deploy.md) | Engineering / IT | One-time cloud relay deployment |
 | [Runbook](./runbook.md) | On-site IT | Day-of troubleshooting |
 | [Data & privacy](./data-privacy.md) | Compliance / IT | PII handling, retention, export |
 | [Incident response](./incident-response.md) | All IT | Breach, loss, kiosk compromise |
@@ -42,8 +45,12 @@ gudessence-tradeshow-app/
 
 ## Show-day summary
 
-1. Kiosk PC has **no internet required** — verify firewall allows local-only if connected.
-2. Copy `config/staff.roster.example.json` → `%AppData%\gudessence-tradeshow-app\staff.roster.json` and set real PINs **before** the event.
-3. Run `npm run dev` (development) or install the built `.exe` (production).
-4. Confirm dual monitors span correctly (Kiosk 1 / Kiosk 2 labels).
-5. After the event: export backups from `%AppData%\gudessence-tradeshow-app\backups\` before wipe.
+**No venue Wi‑Fi?** Use [Hotspot show setup](./hotspot-show-setup.md) — staff phone hotspot + Railway relay.
+
+1. Deploy **Railway relay** → [railway-deploy.md](./railway-deploy.md)
+2. Configure `signup-sync.json` on kiosk → run `npm run validate:show`
+3. Kiosk laptop on **staff hotspot**; guests on **LTE** scan QR
+4. Sync shows **🟢 Cloud relay live — hotspot + LTE ready**
+5. Copy `config/staff.roster.example.json` → `%AppData%\gudessence-tradeshow-app\staff.roster.json` and set PINs
+6. Run built `.exe` on show PC (not `npm run dev`)
+7. After event: export backups from `%AppData%\gudessence-tradeshow-app\backups\`
