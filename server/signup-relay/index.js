@@ -83,7 +83,7 @@ app.get('/staff/:eventId', (req, res) => {
 
 app.get('/staff/all', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.type('html').send(staffMonitorPageHtml(['booth', 'colombia-retreat-cannadelic-2026-06-06']));
+  res.type('html').send(staffMonitorPageHtml(['cannadelic-2026-06-06', 'colombia-retreat-cannadelic-2026-06-06']));
 });
 
 // GET /api/signup/all/public — returns all signups filtered by eventId query param (supports multi-ID comma-separated)
