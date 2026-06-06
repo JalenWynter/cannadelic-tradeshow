@@ -9,6 +9,10 @@ const api = {
   async getContactByPhone(phone) { return await window.electronAPI.jsonGet('Contacts', { phone: phone.replace(/\D/g, '') }); },
   async getContactById(id) { return await window.electronAPI.jsonGet('Contacts', { contact_id: id }); },
   async getAllRecentContacts(limit = 50) { return await window.electronAPI.jsonQuery('Contacts', {}, limit); },
+  async getVipContacts() {
+    const all = await window.electronAPI.jsonQuery('Contacts', {});
+    return all.filter((c) => c.is_vip);
+  },
   async searchContacts(searchTerm, limit = 30) {
     const list = await window.electronAPI.jsonQuery('Contacts', {});
     const term = searchTerm.toLowerCase().trim();

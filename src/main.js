@@ -612,7 +612,12 @@ ipcMain.handle('get-colombia-retreat-signup-url', () => {
 
 ipcMain.handle('get-cloud-staff-url', () => {
   if (!mobileSignupHandlers) initMobileSignup();
-  return signupUrls?.publicStaffUrl || null;
+  if (signupUrls?.publicStaffUrl) return signupUrls.publicStaffUrl;
+  if (signupUrls?.relayApiUrl) {
+    const base = signupUrls.relayApiUrl.replace(/\/$/, '');
+    return `${base}/staff/all`;
+  }
+  return null;
 });
 
 ipcMain.handle('open-cloud-staff-page', () => {

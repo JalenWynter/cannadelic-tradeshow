@@ -39,8 +39,8 @@ const EARN_POINTS_TASKS = [
     raffleEntry: true,
     verifyLabel: 'Find Guest & Verify',
     verifyType: 'staff',
-    qrUrl: 'https://search.google.com/local/writereview?placeid=ChIJRYOSq0vzwogRnYP5n_UBNkQ',
-    qrCaption: 'Scan to review',
+    qrUrl: 'https://gudessence-cannadelic-relay-production.up.railway.app/staff/cannadelic-2026-06-06',
+    qrCaption: 'Scan → staff verifies',
   },
   {
     actionName: 'YouTube Subscription',
@@ -49,8 +49,8 @@ const EARN_POINTS_TASKS = [
     raffleEntry: true,
     verifyLabel: 'Find Guest & Verify',
     verifyType: 'staff',
-    qrUrl: 'https://www.youtube.com/@GUDESSENCE?sub_confirmation=1',
-    qrCaption: 'Scan to subscribe',
+    qrUrl: 'https://gudessence-cannadelic-relay-production.up.railway.app/staff/cannadelic-2026-06-06',
+    qrCaption: 'Scan → staff verifies',
   },
   {
     actionName: 'Social Media Story Post',
@@ -59,8 +59,8 @@ const EARN_POINTS_TASKS = [
     raffleEntry: true,
     verifyLabel: 'Find Guest & Verify',
     verifyType: 'staff',
-    qrUrl: 'https://www.instagram.com/gudessence.clearwater/',
-    qrCaption: 'Scan to follow / tag',
+    qrUrl: 'https://gudessence-cannadelic-relay-production.up.railway.app/staff/cannadelic-2026-06-06',
+    qrCaption: 'Scan → staff verifies',
   },
   {
     actionName: 'Seasoning Vote',
@@ -218,7 +218,8 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
       offsetY: e.clientY - anchored.y,
     };
 
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Do NOT capture pointer here — only capture after real drag movement
+    // to avoid stealing pointerup from slow/clicks on keyboard buttons
     e.preventDefault();
   };
 
@@ -226,6 +227,11 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
     if (!dragRef.current.active || dragRef.current.pointerId !== e.pointerId) return;
     const el = keyboardRef.current;
     if (!el) return;
+
+    // Start pointer capture only when drag actually begins (movement detected)
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
 
     const rect = el.getBoundingClientRect();
     setPosition(clampKeyboardPosition(
@@ -272,17 +278,17 @@ const VirtualKeyboard = ({ value, onChange, onClear, onClose, onNext, layout = '
   }, []);
 
   const handleKey = (key) => {
-    playSound('click');
+    try { playSound('click'); } catch (_) {}
     if (key === 'DONE') { onClose(); return; }
     if (key === 'NEXT') { onNext(); return; }
     if (key === 'BACKSPACE') { onChange(value.slice(0, -1)); return; }
     if (key === 'CLEAR') { onClear ? onClear() : onChange(''); return; }
     if (key === 'SPACE') { if (!maxLength || value.length < maxLength) onChange(value + ' '); return; }
-    
+
     if (!maxLength || value.length < maxLength) {
       const newValue = value + key;
       onChange(newValue);
-      
+
       // Auto-close numeric keyboard for phone numbers (10 digits)
       if (layout === 'numeric' && maxLength === 10 && newValue.length === 10) {
         setTimeout(onClose, 100);
@@ -2377,6 +2383,7 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, currentCont
   const [status, setStatus] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [popcornExpanded, setPopcornExpanded] = useState(false);
+  const [vipContacts, setVipContacts] = useState([]);
 
   const loadStatus = async (id) => {
     const contact = await api.getContactById(id);
@@ -2387,7 +2394,6 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, currentCont
       isVip: !!contact.is_vip,
       points: contact.total_points || 0,
       lastRedeemed: contact.vip_popcorn_last_redeemed_at,
-      flowerClaimed: !!contact.flower_claimed,
       popcornCount: contact.vip_popcorn_count || 0,
     });
     onSuccess(id);
@@ -2396,6 +2402,10 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, currentCont
 
   useEffect(() => {
     if (currentContactId) loadStatus(currentContactId);
+    (async () => {
+      const vips = await api.getVipContacts();
+      setVipContacts(vips);
+    })();
   }, [currentContactId]);
 
   const handleRedeemPopcorn = async () => {
@@ -2407,6 +2417,12 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, currentCont
     } catch (err) {
       setNotify({ message: err.message, type: 'error' });
     }
+  };
+
+  const handleSelectVip = (contact) => {
+    playSound('click');
+    loadStatus(contact.contact_id);
+    clearSearch();
   };
 
   if (isRegistering) {
@@ -2433,124 +2449,198 @@ const VipLounge = ({ onNavigate, onSuccess, setNotify, onFocusInput, currentCont
     <div className="view-container" style={{ padding: '40px 20px', overflowY: 'auto' }}>
       <h2 className="neon-text-pink" style={{ textAlign: 'center', marginBottom: '32px' }}>VIP Lounge</h2>
 
-      {!status ? (
-        <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-          <div className="card" style={{ marginBottom: '24px' }}>
-            <p style={{ marginBottom: '20px', opacity: 0.75 }}>Search your account to access VIP perks.</p>
-            <div className="input-group">
-              <input
-                type="text"
-                placeholder="Email, phone, name, or guest ID…"
-                value={search}
-                readOnly
-                onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
-              />
-            </div>
-            <ContactSearchResults
-              results={searchResults}
-              onSelect={(c) => { loadStatus(c.contact_id); clearSearch(); }}
+      <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+        {/* Search */}
+        <div className="card" style={{ marginBottom: '20px' }}>
+          <p style={{ marginBottom: '16px', opacity: 0.75 }}>Search your account to access VIP perks.</p>
+          <div className="input-group">
+            <input
+              type="text"
+              placeholder="Email, phone, name, or guest ID…"
+              value={search}
+              readOnly
+              onClick={(e) => onFocusInput('default', search, handleSearch, null, null, e.currentTarget)}
             />
           </div>
-          <button
-            className="btn btn-violet"
-            onClick={() => { playSound('click'); setIsRegistering(true); }}
-            style={{ width: '100%' }}
-          >
-            Register VIP
-          </button>
+          <ContactSearchResults
+            results={searchResults}
+            onSelect={(c) => { loadStatus(c.contact_id); clearSearch(); }}
+          />
         </div>
-      ) : (
-        <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-          {/* VIP Member Card — always shown, click to expand popcorn */}
+
+        {/* Register Button */}
+        <button
+          className="btn btn-violet"
+          onClick={() => { playSound('click'); setIsRegistering(true); }}
+          style={{ width: '100%', marginBottom: '28px' }}
+        >
+          Register VIP
+        </button>
+
+        {/* VIP Member Grid */}
+        {vipContacts.length > 0 && (
+          <div style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', opacity: 0.7 }}>👑 VIP Members</h3>
+              <span style={{ fontSize: '0.78rem', opacity: 0.5 }}>{vipContacts.length} registered</span>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                gap: '12px',
+                maxHeight: '320px',
+                overflowY: 'auto',
+                paddingRight: '4px',
+              }}
+            >
+              {vipContacts.map((vip) => (
+                <button
+                  key={vip.contact_id}
+                  type="button"
+                  onClick={() => handleSelectVip(vip)}
+                  style={{
+                    background: status?.contactId === vip.contact_id
+                      ? 'rgba(255,165,0,0.18)'
+                      : 'rgba(255,255,255,0.04)',
+                    border: status?.contactId === vip.contact_id
+                      ? '2px solid rgba(255,165,0,0.7)'
+                      : '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    padding: '16px 10px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '50%',
+                      background: 'rgba(255,165,0,0.18)',
+                      border: '2px solid rgba(255,165,0,0.45)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.5rem',
+                    }}
+                  >
+                    👑
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', lineHeight: 1.3 }}>
+                      {vip.name}
+                    </p>
+                    <p style={{ margin: '3px 0 0', fontSize: '0.68rem', opacity: 0.5 }}>
+                      {api.contactReference(vip) || vip.contact_id}
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.62rem',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      background: 'rgba(255,165,0,0.15)',
+                      border: '1px solid rgba(255,165,0,0.4)',
+                      color: 'rgba(255,165,0,0.9)',
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                    }}
+                  >
+                    VIP
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Active Member Detail */}
+        {status && (
           <div
             className="card"
             style={{
               textAlign: 'center',
-              marginBottom: '20px',
               border: '2px solid rgba(255, 165, 0, 0.5)',
               background: 'linear-gradient(160deg, rgba(255,165,0,0.1) 0%, rgba(0,0,0,0.5) 100%)',
-              cursor: 'pointer',
             }}
-            onClick={() => { playSound('click'); setPopcornExpanded((p) => !p); }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '6px' }}>
               <span style={{ fontSize: '1.4rem' }}>👑</span>
               <h2 className="neon-text-lime" style={{ margin: 0 }}>{status.name}</h2>
             </div>
-            <p style={{ opacity: 0.7, fontSize: '0.9rem', margin: '4px 0 0' }}>
+            <p style={{ opacity: 0.7, fontSize: '0.85rem', margin: '4px 0 0' }}>
               {status.points} pts · VIP Active
             </p>
-            <p style={{ opacity: 0.5, fontSize: '0.78rem', margin: '8px 0 0' }}>
-              {popcornExpanded ? '▲ Tap to collapse' : '▼ Tap for popcorn details'}
+            <p style={{ opacity: 0.45, fontSize: '0.72rem', margin: '3px 0 0', fontFamily: 'ui-monospace, monospace' }}>
+              {status.contactId}
             </p>
-          </div>
 
-          {/* Popcorn Details — expanded on card click */}
-          {popcornExpanded && (
-            <div
-              className="card"
+            <button
+              onClick={() => { playSound('click'); setPopcornExpanded((p) => !p); }}
               style={{
-                marginBottom: '20px',
-                border: '1px solid rgba(255, 165, 0, 0.3)',
-                background: 'rgba(255,165,0,0.05)',
-                textAlign: 'center',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                marginTop: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                margin: '12px auto 0',
+                color: 'rgba(255,255,255,0.5)',
+                fontSize: '0.78rem',
               }}
             >
-              <h3 className="neon-text-pink" style={{ margin: '0 0 16px' }}>🍿 Popcorn Info</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
-                <div className="card" style={{ textAlign: 'center', padding: '16px' }}>
-                  <p style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--neon-lime)', margin: 0 }}>{status.popcornCount}</p>
-                  <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: '4px 0 0' }}>Total refills</p>
-                </div>
-                <div className="card" style={{ textAlign: 'center', padding: '16px' }}>
-                  <RefillCountdown lastRedeemed={status.lastRedeemed} />
-                  <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: '4px 0 0' }}>Next refill</p>
-                </div>
-              </div>
-              <button
-                className="btn btn-lime"
-                style={{ width: '100%' }}
-                onClick={(e) => { e.stopPropagation(); playSound('click'); handleRedeemPopcorn(); }}
+              🍿 Popcorn info {popcornExpanded ? '▲' : '▼'}
+            </button>
+
+            {popcornExpanded && (
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '16px',
+                  borderRadius: '10px',
+                  background: 'rgba(255,165,0,0.06)',
+                  border: '1px solid rgba(255,165,0,0.2)',
+                  textAlign: 'center',
+                }}
               >
-                Dispense Popcorn
-              </button>
-            </div>
-          )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div className="card" style={{ textAlign: 'center', padding: '14px' }}>
+                    <p style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--neon-lime)', margin: 0 }}>
+                      {status.popcornCount}
+                    </p>
+                    <p style={{ fontSize: '0.72rem', opacity: 0.55, margin: '4px 0 0' }}>Total refills</p>
+                  </div>
+                  <div className="card" style={{ textAlign: 'center', padding: '14px' }}>
+                    <RefillCountdown lastRedeemed={status.lastRedeemed} />
+                    <p style={{ fontSize: '0.72rem', opacity: 0.55, margin: '4px 0 0' }}>Next refill</p>
+                  </div>
+                </div>
+                <button
+                  className="btn btn-lime"
+                  style={{ width: '100%' }}
+                  onClick={() => { playSound('click'); handleRedeemPopcorn(); }}
+                >
+                  Dispense Popcorn
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Upgrade prompt for non-VIP */}
-          {!status.isVip && (
-            <div
-              className="card"
-              style={{
-                background: 'rgba(255, 0, 127, 0.08)',
-                border: '1px solid rgba(255, 0, 127, 0.4)',
-                marginBottom: '20px',
-                padding: '24px',
-                textAlign: 'center',
-              }}
-            >
-              <h3 className="neon-text-pink" style={{ fontSize: '1.6rem', margin: '0 0 12px' }}>UPGRADE TO VIP: $20</h3>
-              <p style={{ marginBottom: '16px', opacity: 0.8 }}>VIP Experience includes:</p>
-              <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.9rem', lineHeight: 1.7, textAlign: 'left', marginBottom: '20px' }}>
-                {VIP_EXPERIENCE_PERKS.map((perk) => (
-                  <li key={perk.label}>★ {perk.label}</li>
-                ))}
-              </ul>
-              <button className="btn btn-lime" style={{ width: '100%' }} onClick={() => { playSound('click'); setIsRegistering(true); }}>
-                Register VIP — $20
-              </button>
-            </div>
-          )}
-
-          <button
-            className="btn"
-            onClick={() => { playSound('click'); setStatus(null); clearSearch(); onNavigate('home'); }}
-            style={{ width: '100%', background: 'transparent' }}
-          >
-            Back to Home
-          </button>
-        </div>
-      )}
+        <button
+          className="btn"
+          onClick={() => { playSound('click'); setStatus(null); clearSearch(); onNavigate('home'); }}
+          style={{ width: '100%', background: 'transparent', marginTop: '20px' }}
+        >
+          Back to Home
+        </button>
+      </div>
     </div>
   );
 };
@@ -3860,8 +3950,8 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
     { icon: '🍳', text: 'Daily Chef Breakfast' },
     { icon: '🍽️', text: 'Private Chef Dinner' },
     { icon: '🧘', text: 'Morning Yoga' },
-    { icon: '🏨', text: 'Luxury Accommodations' },
-    { icon: '🎁', text: 'GŪD Welcome Bag' }
+    { icon: '🎁', text: 'GŪD Welcome Bag' },
+    { icon: '🏨', text: 'Luxury Accommodations' }
   ];
 
   const handleSignUp = async () => {
@@ -3897,18 +3987,42 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
         {/* Pricing Flash */}
         <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
           <div className="card" style={{ flex: 1, textAlign: 'center', background: 'rgba(255,255,255,0.05)' }}>
-            <p style={{ opacity: 0.5, textDecoration: 'line-through' }}>Regular Price: $2,000</p>
+            <p style={{ color: 'rgba(255,80,80,0.6)', textDecoration: 'line-through', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '4px' }}>REGULAR PRICE: $2,000</p>
             <h3 className="neon-text-pink" style={{ fontSize: '2.2rem' }}>CANNADELIC ONLY: $1,500</h3>
             <p className="neon-text-lime" style={{ fontWeight: 'bold', fontSize: '0.9rem', marginTop: '5px' }}>SAVE $500 BY JOINING THE WAITLIST TODAY</p>
           </div>
         </div>
 
-        {/* Amenities Grid */}
+        {/* Amenities Grid — 4 | 3 | 4 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '24px', marginBottom: '40px', alignItems: 'start' }}>
+          {/* Column 1 — 4 items */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {[0,1,2,3].map(i => (
+              <div key={i} className="card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(20, 20, 24, 0.8)' }}>
+                <span style={{ fontSize: '1.5rem' }}>{amenities[i].icon}</span>
+                <span style={{ fontWeight: '500' }}>{amenities[i].text}</span>
+              </div>
+            ))}
+          </div>
+          {/* Center gap — column 2 intentionally empty */}
+          <div />
+          {/* Column 3 — 4 items */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {[7,8,9,10].map(i => (
+              <div key={i} className="card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(20, 20, 24, 0.8)' }}>
+                <span style={{ fontSize: '1.5rem' }}>{amenities[i].icon}</span>
+                <span style={{ fontWeight: '500' }}>{amenities[i].text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Middle column — 3 items below gap */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px', marginBottom: '40px' }}>
-          {amenities.map((item, i) => (
+          {[4,5,6].map(i => (
             <div key={i} className="card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(20, 20, 24, 0.8)' }}>
-              <span style={{ fontSize: '1.5rem' }}>{item.icon}</span>
-              <span style={{ fontWeight: '500' }}>{item.text}</span>
+              <span style={{ fontSize: '1.5rem' }}>{amenities[i].icon}</span>
+              <span style={{ fontWeight: '500' }}>{amenities[i].text}</span>
             </div>
           ))}
         </div>
@@ -3942,6 +4056,7 @@ const ColombiaRetreat = ({ onBack, onNavigate, currentContactId, setNotify }) =>
             title="Phone Sign-Up — Colombia Retreat"
             showQr
             showPending={false}
+            showStaffTools={false}
             staffName="Colombia Page"
             onApproved={() => setNotify({ message: 'Colombia retreat signup approved.', type: 'success' })}
             onDeclined={() => setNotify({ message: 'Signup declined.', type: 'success' })}
@@ -4392,8 +4507,9 @@ const App = () => {
             anchorRect={keyboard.anchorRect}
             onNext={keyboard.nextCallback}
             onChange={(v) => {
-              setKeyboard({ ...keyboard, value: v });
-              if (keyboard.callback) keyboard.callback(v);
+              setKeyboard((prev) => ({ ...prev, value: v }));
+              // Use functional update to always read the latest callback from state
+              setKeyboard((prev) => { if (prev.callback) prev.callback(v); return prev; });
             }} 
             onClose={() => setKeyboard({ ...keyboard, isOpen: false })} 
           />
