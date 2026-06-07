@@ -18,6 +18,7 @@ import {
   publicSignupPayload,
 } from './security.js';
 import { guestSignupPageHtml } from './guestSignupPage.js';
+import { qrLandingPageHtml } from './qrLandingPage.js';
 import { staffMonitorPageHtml, staffSignupRecord } from './staffMonitorPage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,6 +70,13 @@ app.use(express.json({ limit: '32kb' }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'gudessence-signup-relay' });
+});
+
+app.get('/qr/:eventId', (req, res) => {
+  const eventId = req.params.eventId;
+  const title = String(req.query.title || 'Cannadelic Night Market').slice(0, 80);
+  const signupUrl = `https://gudessence-cannadelic-relay-production.up.railway.app/signup/${encodeURIComponent(eventId)}?title=${encodeURIComponent(title)}`;
+  res.type('html').send(qrLandingPageHtml(signupUrl, title));
 });
 
 app.get('/signup/:eventId', (req, res) => {
