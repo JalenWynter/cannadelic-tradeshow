@@ -28,6 +28,8 @@ export function qrLandingPageHtml(signupUrl, eventTitle) {
       text-transform: uppercase;
       color: rgba(204,255,0,0.6);
       font-weight: 600;
+      text-align: center;
+      word-break: keep-all;
     }
     .qr-frame {
       padding: 28px;
@@ -69,7 +71,7 @@ export function qrLandingPageHtml(signupUrl, eventTitle) {
   </style>
 </head>
 <body>
-  <p class="cannadelic-tag">Cannadelic Night Market</p>
+  <p class="cannadelic-tag">${eventTitle}</p>
   <div class="qr-frame" id="qrContainer"></div>
   <div class="cta-text">
     <p class="headline">Sign up here</p>
