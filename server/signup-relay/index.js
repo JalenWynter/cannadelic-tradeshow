@@ -86,6 +86,7 @@ app.get('/signup/:eventId', (req, res) => {
     return res.redirect(302, '/signup/cannadelic-2026-06-06?title=Cannadelic%20Night%20Market');
   }
   const title = String(req.query.title || 'Cannadelic Night Market').slice(0, 80);
+  if (!req.query.m) return res.type('html').send(qrLandingPageHtml(`https://gudessence-cannadelic-relay-production.up.railway.app/signup/${encodeURIComponent(eventId)}?title=${encodeURIComponent(title)}&m=1`, title));
   res.type('html').send(guestSignupPageHtml(eventId, title));
 });
 
